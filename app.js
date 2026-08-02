@@ -72,7 +72,8 @@ let state = {
   answerDistributionChannel: null,
   answerTally: {}, // { optionIdx: count } — 현재 활성 문제의 실시간 답안 분포
   questionList: [], // 관리자 패널에 표시할 등록된 문제 목록 캐시
-  answerCounts: {} // { question_id: 참여자 수 } — 관리자 패널의 초기화 버튼에 표시
+  answerCounts: {}, // { question_id: 참여자 수 } — 관리자 패널의 초기화 버튼에 표시
+  adminCountdownInterval: null // 관리자 패널의 활성 문제 남은시간 표시 + 자동 비활성화 타이머
 };
 
 // 3. DOM Elements Cache
@@ -290,6 +291,8 @@ function init() {
           supabaseClient.removeChannel(state.answerDistributionChannel);
           state.answerDistributionChannel = null;
         }
+        clearInterval(state.adminCountdownInterval);
+        state.adminCountdownInterval = null;
 
         // 로그아웃 시 로그인 폼 상태를 '로그인 모드'로 리셋
         if (state.isSignUpMode) {
@@ -764,6 +767,7 @@ async function handleActiveQuestionChange(questionId, activatedAt) {
   if (state.isAdmin) {
     // 활성 문제가 바뀔 때마다(특히 비활성화 시) 문제별 참여자 수를 최신 상태로 반영합니다.
     await loadQuestionList();
+    startAdminCountdown();
     if (questionId !== null && questionId !== undefined) {
       subscribeToAnswerDistribution(questionId);
     } else if (state.answerDistributionChannel) {
@@ -1054,6 +1058,14 @@ function renderAdminPanel() {
     row.appendChild(activateBtn);
     row.appendChild(editBtn);
     row.appendChild(resetBtn);
+
+    if (isActive) {
+      const countdownSpan = document.createElement("span");
+      countdownSpan.id = "admin-active-countdown";
+      countdownSpan.className = "admin-countdown";
+      row.appendChild(countdownSpan);
+    }
+
     elements.adminQuestionList.appendChild(row);
   });
 }
@@ -1090,6 +1102,43 @@ async function resetQuestionAnswers(questionId) {
     console.error("응답 초기화 실패:", err);
     alert("응답 초기화에 실패했습니다: " + err.message);
   }
+}
+
+// 9.6c 관리자: 활성 문제의 남은 시간을 표시하고, 제한시간이 다 되면 자동으로 비활성화합니다.
+// (서버 측 스케줄러 없이 순수 클라이언트로 동작하므로, 관리자 화면이 열려있는 동안에만 자동 비활성화가 작동합니다.)
+function startAdminCountdown() {
+  clearInterval(state.adminCountdownInterval);
+  state.adminCountdownInterval = null;
+
+  if (!state.activeQuestionId || !state.activeQuestionActivatedAt) return;
+
+  const activeQuestion = state.questionList.find(q => q.id === state.activeQuestionId);
+  if (!activeQuestion) return;
+
+  const timeLimit = activeQuestion.time_limit || TIMER_LIMIT;
+  const activatedAtMs = new Date(state.activeQuestionActivatedAt).getTime();
+  let autoDeactivating = false;
+
+  const tick = () => {
+    const elapsedSeconds = (Date.now() - activatedAtMs) / 1000;
+    const remaining = Math.max(0, Math.ceil(timeLimit - elapsedSeconds));
+
+    const countdownEl = document.getElementById("admin-active-countdown");
+    if (countdownEl) {
+      countdownEl.textContent = `남은 시간: ${remaining}초`;
+    }
+
+    if (remaining <= 0 && !autoDeactivating) {
+      autoDeactivating = true;
+      clearInterval(state.adminCountdownInterval);
+      state.adminCountdownInterval = null;
+      // 제한시간 종료 → 자동으로 비활성화 (5분위 채점 마감 포함)
+      activateQuestion(null);
+    }
+  };
+
+  tick();
+  state.adminCountdownInterval = setInterval(tick, 1000);
 }
 
 // 9.7 관리자: 문제 활성화/비활성화 (활성화 전, 직전 문제가 있었다면 5분위 채점을 먼저 마감)

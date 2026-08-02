@@ -245,11 +245,13 @@ $$ language plpgsql security definer;
 grant execute on function public.finalize_question_scoring(bigint) to authenticated;
 
 -- 13. 리더보드 뷰 (누적 점수 기준 정렬)
+-- quiz_answers를 기준으로 집계하여, 최소 1문제 이상 응답(참여)한 사용자만 리더보드에 노출됩니다.
+-- (profiles를 기준으로 LEFT JOIN하면 퀴즈에 한 번도 참여하지 않은 가입자도 0점으로 함께 노출되므로 주의)
 create view public.leaderboard as
-select p.id as user_id, p.username, coalesce(sum(qa.points_awarded), 0) as total_score
-from public.profiles p
-left join public.quiz_answers qa on qa.user_id = p.id
-group by p.id, p.username
+select qa.user_id, p.username, sum(qa.points_awarded) as total_score
+from public.quiz_answers qa
+join public.profiles p on p.id = qa.user_id
+group by qa.user_id, p.username
 order by total_score desc;
 
 grant select on public.leaderboard to authenticated;
@@ -286,6 +288,15 @@ create policy "관리자만 환영 문구를 수정할 수 있다."
   on public.app_settings for update to authenticated
   using (exists (select 1 from public.profiles where id = auth.uid() and is_admin = true))
   with check (exists (select 1 from public.profiles where id = auth.uid() and is_admin = true));
+
+-- 18. [마이그레이션] 이미 leaderboard 뷰를 만든 적이 있다면 아래로 교체 실행하세요.
+-- 기존 버전은 profiles 기준 LEFT JOIN이라 퀴즈에 한 번도 참여하지 않은 가입자도 0점으로 노출되는 문제가 있었습니다.
+create or replace view public.leaderboard as
+select qa.user_id, p.username, sum(qa.points_awarded) as total_score
+from public.quiz_answers qa
+join public.profiles p on p.id = qa.user_id
+group by qa.user_id, p.username
+order by total_score desc;
 ```
 
 **Realtime 활성화**: Supabase 대시보드에서 `Database` → `Replication`으로 이동해 `quiz_state`와 `quiz_answers` 테이블의 Realtime 토글을 모두 켜주세요 (답안 분포 실시간 표시는 `quiz_answers` INSERT 이벤트 구독이 필요합니다). 또는 SQL Editor에서:
