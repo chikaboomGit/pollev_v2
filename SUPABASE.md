@@ -253,6 +253,39 @@ group by p.id, p.username
 order by total_score desc;
 
 grant select on public.leaderboard to authenticated;
+
+-- 14. 문제별 제한시간(초) 컬럼 추가 (기존 문제는 기본값 15초로 채워짐)
+alter table public.questions add column time_limit integer not null default 15 check (time_limit > 0);
+
+-- 15. 관리자가 문제를 수정할 수 있도록 UPDATE 정책 추가
+create policy "관리자만 문제를 수정할 수 있다."
+  on public.questions for update to authenticated
+  using (exists (select 1 from public.profiles where id = auth.uid() and is_admin = true))
+  with check (exists (select 1 from public.profiles where id = auth.uid() and is_admin = true));
+
+-- 16. 관리자가 문제별 응답 기록을 초기화(삭제)할 수 있도록 DELETE 정책 추가
+create policy "관리자만 응답 기록을 삭제할 수 있다."
+  on public.quiz_answers for delete to authenticated
+  using (exists (select 1 from public.profiles where id = auth.uid() and is_admin = true));
+
+-- 17. 참가자 대기 화면에 표시되는 환영 문구 (관리자가 수정 가능, 단일 행으로 운영)
+create table public.app_settings (
+  id integer primary key default 1,
+  welcome_message text not null default 'HTML, CSS, JavaScript 및 브라우저 아키텍처에 대한 흥미로운 퀴즈가 진행됩니다.',
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  constraint single_row check (id = 1)
+);
+insert into public.app_settings (id) values (1);
+
+alter table public.app_settings enable row level security;
+
+create policy "인증된 사용자는 환영 문구를 조회할 수 있다."
+  on public.app_settings for select to authenticated using (true);
+
+create policy "관리자만 환영 문구를 수정할 수 있다."
+  on public.app_settings for update to authenticated
+  using (exists (select 1 from public.profiles where id = auth.uid() and is_admin = true))
+  with check (exists (select 1 from public.profiles where id = auth.uid() and is_admin = true));
 ```
 
 **Realtime 활성화**: Supabase 대시보드에서 `Database` → `Replication`으로 이동해 `quiz_state`와 `quiz_answers` 테이블의 Realtime 토글을 모두 켜주세요 (답안 분포 실시간 표시는 `quiz_answers` INSERT 이벤트 구독이 필요합니다). 또는 SQL Editor에서:

@@ -19,6 +19,7 @@ const OFFLINE_DEMO_QUESTIONS = [
     options: ["\"null\"", "\"undefined\"", "\"object\"", "\"function\""],
     correct_option: 2,
     points: 100,
+    time_limit: 15,
     explanation: "JavaScript의 오래된 역사적 버그로 인해 `typeof null`은 `'object'`를 반환합니다."
   },
   {
@@ -28,6 +29,7 @@ const OFFLINE_DEMO_QUESTIONS = [
     options: ["O", "X"],
     correct_option: 1,
     points: 100,
+    time_limit: 15,
     explanation: "position: absolute는 static이 아닌 가장 가까운 조상 요소를 기준으로 배치됩니다. 해당 조상이 없다면 최상위 html 요소가 기준이 됩니다."
   },
   {
@@ -37,15 +39,22 @@ const OFFLINE_DEMO_QUESTIONS = [
     options: ["Callback", "Observable", "Promise", "Generator"],
     correct_option: 2,
     points: 100,
+    time_limit: 15,
     explanation: "Promise 객체는 비동기 연산의 현재 상태를 캡슐화합니다."
   }
 ];
+
+// SVG Dash offset variables for Timer Circle (radius r = 26, circumference = ~163.36)
+const TIMER_LIMIT = 15; // 기본 제한시간(초) — 문제별 time_limit이 없을 때(오프라인 데모 등) 사용되는 기본값
+const CIRCUMFERENCE = 163.36;
 
 // 2. Application State Variables
 let state = {
   session: null,
   username: "",
   currentQuestion: null, // 현재 화면에 렌더링된 문제 객체 (DB row 또는 오프라인 데모 문제)
+  currentTimeLimit: TIMER_LIMIT, // 현재 문제의 제한시간(초) — 문제별로 가변
+  selectedOptionIdx: null, // 제출 전 사용자가 선택해둔 옵션 (제출 버튼을 눌러야 확정됨)
   offlineIdx: 0, // 오프라인 모드 전용 순차 진행 인덱스
   score: 0,
   answers: [], // Stores index of selected options, -1 for timeout (오프라인 모드 전용)
@@ -58,21 +67,20 @@ let state = {
   isAdmin: false,
   activeQuestionId: null, // 현재 관리자가 활성화한 문제의 questions.id (null이면 비활성)
   activeQuestionActivatedAt: null, // 현재 활성 문제의 quiz_state.updated_at 스냅샷 (소요시간 채점 기준)
-  answeredQuestionIds: new Set(), // 이미 응답을 제출한 문제 id 집합
+  editingQuestionId: null, // 관리자가 현재 수정 중인 문제 id (null이면 신규 등록 모드)
   quizStateChannel: null,
   answerDistributionChannel: null,
   answerTally: {}, // { optionIdx: count } — 현재 활성 문제의 실시간 답안 분포
-  questionList: [] // 관리자 패널에 표시할 등록된 문제 목록 캐시
+  questionList: [], // 관리자 패널에 표시할 등록된 문제 목록 캐시
+  answerCounts: {} // { question_id: 참여자 수 } — 관리자 패널의 초기화 버튼에 표시
 };
-
-// SVG Dash offset variables for Timer Circle (radius r = 26, circumference = ~163.36)
-const TIMER_LIMIT = 15;
-const CIRCUMFERENCE = 163.36;
 
 // 3. DOM Elements Cache
 const elements = {
+  appLoading: document.getElementById("app-loading"),
+  appContainer: document.getElementById("app-container"),
   themeToggleBtn: document.getElementById("theme-toggle-btn"),
-  
+
   // Screens
   welcomeScreen: document.getElementById("welcome-screen"),
   quizScreen: document.getElementById("quiz-screen"),
@@ -115,6 +123,7 @@ const elements = {
 
   // Start Container (Lobby)
   userNickname: document.getElementById("user-nickname"),
+  welcomeSubtitleText: document.getElementById("welcome-subtitle-text"),
   logoutBtn: document.getElementById("logout-btn"),
   withdrawBtn: document.getElementById("withdraw-btn"),
 
@@ -128,12 +137,19 @@ const elements = {
   adminDeactivateBtn: document.getElementById("admin-deactivate-btn"),
   adminAnswerDistribution: document.getElementById("admin-answer-distribution"),
 
-  // 문제 등록 폼 (관리자)
+  // 환영 문구 수정 폼 (관리자)
+  welcomeMessageForm: document.getElementById("welcome-message-form"),
+  welcomeMessageInput: document.getElementById("welcome-message-input"),
+  welcomeMessageSubmitBtn: document.getElementById("welcome-message-submit-btn"),
+
+  // 문제 등록/수정 폼 (관리자)
   questionForm: document.getElementById("question-form"),
   questionTextInput: document.getElementById("question-text-input"),
   questionOptionsFields: document.getElementById("question-options-fields"),
   questionPointsInput: document.getElementById("question-points-input"),
+  questionTimeLimitInput: document.getElementById("question-time-limit-input"),
   questionSubmitBtn: document.getElementById("question-submit-btn"),
+  questionCancelEditBtn: document.getElementById("question-cancel-edit-btn"),
 
   // 리더보드 (참가자 대기 화면)
   leaderboardList: document.getElementById("leaderboard-list"),
@@ -147,6 +163,7 @@ const elements = {
   timerProgress: document.getElementById("timer-progress"),
   questionText: document.getElementById("question-text"),
   optionsContainer: document.getElementById("options-container"),
+  submitAnswerBtn: document.getElementById("submit-answer-btn"),
   answerDistribution: document.getElementById("answer-distribution"),
 
   // Result Screen Elements
@@ -158,6 +175,15 @@ const elements = {
   reviewList: document.getElementById("review-list"),
   retryBtn: document.getElementById("retry-btn")
 };
+
+// 세션 복원 확인이 끝나면 로딩 오버레이를 숨기고 앱 화면을 노출합니다. (최초 1회만 동작)
+let appRevealed = false;
+function revealApp() {
+  if (appRevealed) return;
+  appRevealed = true;
+  elements.appLoading.style.display = "none";
+  elements.appContainer.style.display = "block";
+}
 
 // 4. Initializer Function
 function init() {
@@ -173,10 +199,13 @@ function init() {
   elements.adminDeactivateBtn.addEventListener("click", () => activateQuestion(null));
   elements.retryBtn.addEventListener("click", resetQuiz);
   elements.themeToggleBtn.addEventListener("click", toggleTheme);
-  elements.questionForm.addEventListener("submit", handleCreateQuestion);
+  elements.questionForm.addEventListener("submit", handleQuestionFormSubmit);
+  elements.questionCancelEditBtn.addEventListener("click", cancelEditQuestion);
   elements.questionForm.querySelectorAll('input[name="question-type"]').forEach((radio) => {
-    radio.addEventListener("change", renderQuestionOptionFields);
+    radio.addEventListener("change", () => renderQuestionOptionFields());
   });
+  elements.submitAnswerBtn.addEventListener("click", handleSubmitAnswer);
+  elements.welcomeMessageForm.addEventListener("submit", handleWelcomeMessageSubmit);
 
   // Restore Theme Preferences from localStorage
   const savedTheme = localStorage.getItem("theme");
@@ -205,6 +234,7 @@ function init() {
         elements.forgotPasswordContainer.style.display = "none";
         elements.startContainer.style.display = "none";
         elements.recoveryContainer.style.display = "block";
+        revealApp();
         return;
       }
 
@@ -225,6 +255,7 @@ function init() {
         switchScreen(elements.welcomeScreen);
 
         await fetchUserProfile(session.user.id);
+        await loadWelcomeMessage();
 
         if (state.isAdmin) {
           elements.waitingPanel.style.display = "none";
@@ -233,7 +264,6 @@ function init() {
         } else {
           elements.adminPanel.style.display = "none";
           elements.waitingPanel.style.display = "block";
-          await loadAnsweredQuestionIds(session.user.id);
           await loadLeaderboard();
         }
 
@@ -244,7 +274,6 @@ function init() {
         state.isAdmin = false;
         state.activeQuestionId = null;
         state.activeQuestionActivatedAt = null;
-        state.answeredQuestionIds = new Set();
         state.questionList = [];
         elements.userNickname.textContent = "";
         elements.authContainer.style.display = "block";
@@ -267,10 +296,15 @@ function init() {
           toggleAuthMode();
         }
       }
+
+      // 세션 복원 확인(최초 1회) 결과가 나온 뒤에야 화면을 노출합니다.
+      // 이 시점 이전에 로그인 폼이 잠깐 보였다가 사라지는 깜빡임을 방지하기 위함입니다.
+      revealApp();
     });
   } else {
-    // Supabase가 없을 경우 로컬 대체 처리 (오프라인 모드)
+    // Supabase가 없을 경우 로컬 대체 처리 (오프라인 모드) — 세션 확인이 필요 없으므로 즉시 노출
     setupOfflineMode();
+    revealApp();
   }
 }
 
@@ -342,20 +376,23 @@ async function fetchUserProfile(uuid) {
   }
 }
 
-// 새로고침/재접속 시 이미 응답한 문제 목록을 DB와 동기화합니다.
-// (state.answeredQuestionIds는 메모리에만 있어 새로고침하면 비워지므로, 그대로 두면
-//  이미 답변한 문제를 다시 풀 수 있는 화면이 떠버립니다 — 이를 방지하기 위한 보정 로직입니다.)
-async function loadAnsweredQuestionIds(uuid) {
+// 참가자가 특정 문제에 이미 응답했는지 DB 기준으로 확인합니다.
+// 로그인 시 한 번만 캐시하는 방식 대신 문제 진입 시마다 직접 조회함으로써,
+// 관리자가 응답을 초기화한 경우에도 즉시 정확하게 반영되도록 합니다.
+async function hasAnsweredQuestion(uuid, questionId) {
   try {
     const { data, error } = await supabaseClient
       .from('quiz_answers')
-      .select('question_id')
-      .eq('user_id', uuid);
+      .select('id')
+      .eq('user_id', uuid)
+      .eq('question_id', questionId)
+      .maybeSingle();
 
     if (error) throw error;
-    state.answeredQuestionIds = new Set((data || []).map(row => row.question_id));
+    return !!data;
   } catch (err) {
-    console.error("응답 이력 조회 실패:", err.message);
+    console.error("응답 여부 확인 실패:", err.message);
+    return false;
   }
 }
 
@@ -688,25 +725,35 @@ function handleStartQuiz() {
 }
 
 // 9.1 Live Quiz: 현재 활성 문제 상태 구독 및 초기 조회
+// Supabase가 초기 세션 복원 시 onAuthStateChange 콜백을 짧은 간격으로 두 번 호출하는 경우가 있어,
+// await 이전에 동기적으로 잠금 플래그를 세워 같은 채널을 중복 구독(subscribe 이후 on 호출 에러)하지 않도록 합니다.
+let isSubscribingToQuizState = false;
 async function subscribeToQuizState() {
-  if (!supabaseClient || state.quizStateChannel) return;
+  if (!supabaseClient || state.quizStateChannel || isSubscribingToQuizState) return;
+  isSubscribingToQuizState = true;
 
-  // 최초 진입 시 현재 활성 문제 상태를 1회 조회
-  const { data, error } = await supabaseClient
-    .from('quiz_state')
-    .select('active_question_id, updated_at')
-    .eq('id', 1)
-    .single();
+  try {
+    // 최초 진입 시 현재 활성 문제 상태를 1회 조회
+    const { data, error } = await supabaseClient
+      .from('quiz_state')
+      .select('active_question_id, updated_at')
+      .eq('id', 1)
+      .single();
 
-  if (!error && data) {
-    handleActiveQuestionChange(data.active_question_id, data.updated_at);
+    if (!error && data) {
+      await handleActiveQuestionChange(data.active_question_id, data.updated_at);
+    }
+
+    if (!state.quizStateChannel) {
+      state.quizStateChannel = supabaseClient
+        .channel('quiz_state_changes')
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'quiz_state' },
+          (payload) => handleActiveQuestionChange(payload.new.active_question_id, payload.new.updated_at))
+        .subscribe();
+    }
+  } finally {
+    isSubscribingToQuizState = false;
   }
-
-  state.quizStateChannel = supabaseClient
-    .channel('quiz_state_changes')
-    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'quiz_state' },
-      (payload) => handleActiveQuestionChange(payload.new.active_question_id, payload.new.updated_at))
-    .subscribe();
 }
 
 // 9.2 활성 문제 변경 처리 (참가자 화면 전환 + 관리자 패널 갱신 담당)
@@ -715,7 +762,8 @@ async function handleActiveQuestionChange(questionId, activatedAt) {
   state.activeQuestionActivatedAt = activatedAt || null;
 
   if (state.isAdmin) {
-    renderAdminPanel();
+    // 활성 문제가 바뀔 때마다(특히 비활성화 시) 문제별 참여자 수를 최신 상태로 반영합니다.
+    await loadQuestionList();
     if (questionId !== null && questionId !== undefined) {
       subscribeToAnswerDistribution(questionId);
     } else if (state.answerDistributionChannel) {
@@ -733,7 +781,8 @@ async function handleActiveQuestionChange(questionId, activatedAt) {
     return;
   }
 
-  if (state.answeredQuestionIds.has(questionId)) {
+  const alreadyAnswered = await hasAnsweredQuestion(state.session.user.id, questionId);
+  if (alreadyAnswered) {
     elements.waitingMessage.textContent = "이미 응답을 제출한 문제입니다. 다음 문제를 기다려주세요.";
     switchScreen(elements.welcomeScreen);
     return;
@@ -756,24 +805,29 @@ async function handleActiveQuestionChange(questionId, activatedAt) {
 }
 
 // 9.3 관리자: 문제 등록 폼 — 유형(OX/4지선다)에 따라 보기/정답 입력 필드를 동적으로 생성
-function renderQuestionOptionFields() {
+// prefill이 주어지면(수정 모드) 기존 보기/정답 값을 채워 넣습니다.
+function renderQuestionOptionFields(prefill) {
   const type = elements.questionForm.querySelector('input[name="question-type"]:checked').value;
-  const optionLabels = type === "OX" ? ["O", "X"] : ["", "", "", ""];
+  const optionCount = type === "OX" ? 2 : 4;
+  const presetOptions = prefill && prefill.options.length === optionCount
+    ? prefill.options
+    : (type === "OX" ? ["O", "X"] : ["", "", "", ""]);
+  const correctIdx = prefill ? prefill.correct_option : 0;
 
   elements.questionOptionsFields.innerHTML = "";
-  optionLabels.forEach((presetValue, idx) => {
+  presetOptions.forEach((presetValue, idx) => {
     const row = document.createElement("div");
     row.className = "question-option-row";
     row.innerHTML = `
-      <input type="radio" name="question-correct" value="${idx}" ${idx === 0 ? "checked" : ""}>
+      <input type="radio" name="question-correct" value="${idx}" ${idx === correctIdx ? "checked" : ""}>
       <input type="text" class="question-option-input" placeholder="보기 ${idx + 1}" value="${presetValue}" ${type === "OX" ? "readonly" : ""} required>
     `;
     elements.questionOptionsFields.appendChild(row);
   });
 }
 
-// 9.4 관리자: 문제 등록
-async function handleCreateQuestion(e) {
+// 9.4 관리자: 문제 등록/수정 (state.editingQuestionId 유무로 분기)
+async function handleQuestionFormSubmit(e) {
   e.preventDefault();
 
   const type = elements.questionForm.querySelector('input[name="question-type"]:checked').value;
@@ -782,6 +836,7 @@ async function handleCreateQuestion(e) {
   const options = optionInputs.map(input => input.value.trim());
   const correctRadio = elements.questionForm.querySelector('input[name="question-correct"]:checked');
   const points = parseInt(elements.questionPointsInput.value, 10);
+  const timeLimit = parseInt(elements.questionTimeLimitInput.value, 10);
 
   if (!questionText) {
     alert("문제 내용을 입력해주세요.");
@@ -799,38 +854,134 @@ async function handleCreateQuestion(e) {
     alert("배점은 1 이상의 숫자여야 합니다.");
     return;
   }
+  if (!timeLimit || timeLimit <= 0) {
+    alert("제한시간은 1 이상의 숫자여야 합니다.");
+    return;
+  }
+
+  const isEditing = state.editingQuestionId !== null;
+
+  if (isEditing && state.editingQuestionId === state.activeQuestionId) {
+    const proceed = confirm("지금 활성화되어 참가자들이 풀고 있는 문제입니다. 수정하면 참가자 화면과 내용이 달라질 수 있습니다. 계속하시겠습니까?");
+    if (!proceed) return;
+  }
 
   elements.questionSubmitBtn.disabled = true;
-  elements.questionSubmitBtn.textContent = "등록 중...";
+  elements.questionSubmitBtn.textContent = isEditing ? "수정 중..." : "등록 중...";
+
+  const payload = {
+    question_type: type,
+    question_text: questionText,
+    options: options,
+    correct_option: parseInt(correctRadio.value, 10),
+    points: points,
+    time_limit: timeLimit
+  };
 
   try {
-    const { error } = await supabaseClient
-      .from('questions')
-      .insert([{
-        question_type: type,
-        question_text: questionText,
-        options: options,
-        correct_option: parseInt(correctRadio.value, 10),
-        points: points,
-        created_by: state.session.user.id
-      }]);
+    if (isEditing) {
+      const { error } = await supabaseClient
+        .from('questions')
+        .update(payload)
+        .eq('id', state.editingQuestionId);
+      if (error) throw error;
+    } else {
+      const { error } = await supabaseClient
+        .from('questions')
+        .insert([{ ...payload, created_by: state.session.user.id }]);
+      if (error) throw error;
+    }
 
-    if (error) throw error;
-
-    elements.questionTextInput.value = "";
-    renderQuestionOptionFields();
-    elements.questionPointsInput.value = "100";
+    cancelEditQuestion();
     await loadQuestionList();
   } catch (err) {
-    console.error("문제 등록 실패:", err);
-    alert("문제 등록에 실패했습니다: " + err.message);
+    console.error("문제 저장 실패:", err);
+    alert("문제 저장에 실패했습니다: " + err.message);
   } finally {
     elements.questionSubmitBtn.disabled = false;
-    elements.questionSubmitBtn.textContent = "문제 등록하기";
+    elements.questionSubmitBtn.textContent = state.editingQuestionId ? "수정 완료" : "문제 등록하기";
   }
 }
 
-// 9.5 관리자: 등록된 문제 목록 조회 및 렌더
+// 9.4b 관리자: 문제 수정 모드 진입 — 폼에 기존 값 채우기
+function startEditQuestion(question) {
+  state.editingQuestionId = question.id;
+
+  elements.questionForm.querySelector(`input[name="question-type"][value="${question.question_type}"]`).checked = true;
+  elements.questionTextInput.value = question.question_text;
+  renderQuestionOptionFields(question);
+  elements.questionPointsInput.value = question.points;
+  elements.questionTimeLimitInput.value = question.time_limit;
+
+  elements.questionSubmitBtn.textContent = "수정 완료";
+  elements.questionCancelEditBtn.style.display = "inline-block";
+  elements.questionForm.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+// 9.4c 관리자: 문제 수정 모드 취소 → 등록 모드로 복귀
+function cancelEditQuestion() {
+  state.editingQuestionId = null;
+  elements.questionTextInput.value = "";
+  elements.questionPointsInput.value = "100";
+  elements.questionTimeLimitInput.value = "15";
+  renderQuestionOptionFields();
+  elements.questionSubmitBtn.textContent = "문제 등록하기";
+  elements.questionCancelEditBtn.style.display = "none";
+}
+
+// 9.4d 참가자/관리자 공용: 대기 화면에 표시할 환영 문구 조회
+async function loadWelcomeMessage() {
+  try {
+    const { data, error } = await supabaseClient
+      .from('app_settings')
+      .select('welcome_message')
+      .eq('id', 1)
+      .single();
+
+    if (error) throw error;
+    if (data && data.welcome_message) {
+      elements.welcomeSubtitleText.textContent = data.welcome_message;
+      if (state.isAdmin) {
+        elements.welcomeMessageInput.value = data.welcome_message;
+      }
+    }
+  } catch (err) {
+    console.error("환영 문구 조회 실패:", err.message);
+  }
+}
+
+// 9.4e 관리자: 환영 문구 저장
+async function handleWelcomeMessageSubmit(e) {
+  e.preventDefault();
+
+  const message = elements.welcomeMessageInput.value.trim();
+  if (!message) {
+    alert("문구를 입력해주세요.");
+    return;
+  }
+
+  elements.welcomeMessageSubmitBtn.disabled = true;
+  elements.welcomeMessageSubmitBtn.textContent = "저장 중...";
+
+  try {
+    const { error } = await supabaseClient
+      .from('app_settings')
+      .update({ welcome_message: message, updated_at: new Date().toISOString() })
+      .eq('id', 1);
+    if (error) throw error;
+
+    elements.welcomeSubtitleText.textContent = message;
+    alert("환영 문구가 저장되었습니다.");
+  } catch (err) {
+    console.error("환영 문구 저장 실패:", err);
+    alert("환영 문구 저장에 실패했습니다: " + err.message);
+  } finally {
+    elements.welcomeMessageSubmitBtn.disabled = false;
+    elements.welcomeMessageSubmitBtn.textContent = "문구 저장하기";
+  }
+}
+
+// 9.5 관리자: 등록된 문제 목록 조회 및 렌더 (문제별 참여자 수도 함께 집계)
 async function loadQuestionList() {
   const { data, error } = await supabaseClient
     .from('questions')
@@ -843,6 +994,21 @@ async function loadQuestionList() {
   }
 
   state.questionList = data || [];
+
+  const { data: answerRows, error: countError } = await supabaseClient
+    .from('quiz_answers')
+    .select('question_id');
+
+  if (countError) {
+    console.error("참여자 수 집계 실패:", countError.message);
+    state.answerCounts = {};
+  } else {
+    state.answerCounts = {};
+    (answerRows || []).forEach(row => {
+      state.answerCounts[row.question_id] = (state.answerCounts[row.question_id] || 0) + 1;
+    });
+  }
+
   renderAdminPanel();
 }
 
@@ -856,17 +1022,74 @@ function renderAdminPanel() {
   }
 
   state.questionList.forEach((q) => {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "btn btn-secondary admin-question-btn";
-    btn.textContent = `[${q.question_type === "OX" ? "OX" : "4지선다"} / ${q.points}점] ${q.question_text}`;
-    if (state.activeQuestionId === q.id) {
-      btn.classList.add("active-question");
-      btn.textContent += " (활성 중)";
+    const row = document.createElement("div");
+    row.className = "admin-question-row";
+
+    const isActive = state.activeQuestionId === q.id;
+    const participantCount = state.answerCounts[q.id] || 0;
+
+    const activateBtn = document.createElement("button");
+    activateBtn.type = "button";
+    activateBtn.className = "btn btn-secondary admin-question-btn";
+    activateBtn.textContent = `[${q.question_type === "OX" ? "OX" : "4지선다"} / ${q.points}점 / ${q.time_limit}초] ${q.question_text}`;
+    if (isActive) {
+      activateBtn.classList.add("active-question");
+      activateBtn.textContent += " (활성 중 — 다시 누르면 비활성화)";
     }
-    btn.addEventListener("click", () => activateQuestion(q.id));
-    elements.adminQuestionList.appendChild(btn);
+    // 이미 활성화된 문제를 다시 누르면 비활성화되도록 토글 처리 (관리자 진행 편의)
+    activateBtn.addEventListener("click", () => activateQuestion(isActive ? null : q.id));
+
+    const editBtn = document.createElement("button");
+    editBtn.type = "button";
+    editBtn.className = "btn btn-secondary admin-question-action-btn";
+    editBtn.textContent = "수정";
+    editBtn.addEventListener("click", () => startEditQuestion(q));
+
+    const resetBtn = document.createElement("button");
+    resetBtn.type = "button";
+    resetBtn.className = "btn btn-danger admin-question-action-btn";
+    resetBtn.textContent = `초기화 (참여 ${participantCount}명)`;
+    resetBtn.addEventListener("click", () => resetQuestionAnswers(q.id));
+
+    row.appendChild(activateBtn);
+    row.appendChild(editBtn);
+    row.appendChild(resetBtn);
+    elements.adminQuestionList.appendChild(row);
   });
+}
+
+// 9.6b 관리자: 특정 문제에 쌓인 참가자 응답을 전부 삭제 (다시 풀 수 있는 상태로 초기화)
+async function resetQuestionAnswers(questionId) {
+  const proceed = confirm("이 문제에 대한 모든 참가자의 응답 기록을 삭제합니다. 계속하시겠습니까?");
+  if (!proceed) return;
+
+  try {
+    const { error } = await supabaseClient
+      .from('quiz_answers')
+      .delete()
+      .eq('question_id', questionId);
+    if (error) throw error;
+
+    // 지금 진행 중인 문제를 초기화한 경우, quiz_state를 다시 갱신해 모든 참가자에게
+    // "새로 풀 수 있는 상태"로 재브로드캐스트합니다 (타이머도 새 시각 기준으로 재시작됨).
+    if (questionId === state.activeQuestionId) {
+      const { error: restateError } = await supabaseClient
+        .from('quiz_state')
+        .update({ active_question_id: questionId, updated_at: new Date().toISOString() })
+        .eq('id', 1);
+      if (restateError) throw restateError;
+      await subscribeToAnswerDistribution(questionId);
+    } else {
+      // 비활성 문제를 초기화한 경우엔 quiz_state 변경이 없어 목록을 직접 새로고침해야
+      // "초기화" 버튼의 참여자 수 표시가 즉시 0명으로 갱신됩니다.
+      await loadQuestionList();
+    }
+
+    alert("응답 기록이 초기화되었습니다.");
+  } catch (err) {
+    console.error("응답 초기화 실패:", err);
+    alert("응답 초기화에 실패했습니다: " + err.message);
+  }
 }
 
 // 9.7 관리자: 문제 활성화/비활성화 (활성화 전, 직전 문제가 있었다면 5분위 채점을 먼저 마감)
@@ -892,8 +1115,6 @@ async function activateQuestion(questionId) {
 
 // 9.8 참가자 응답을 quiz_answers 테이블에 기록
 async function submitAnswer(questionId, selectedOption, isCorrect) {
-  state.answeredQuestionIds.add(questionId);
-
   if (!supabaseClient || !state.session) return;
 
   try {
@@ -915,37 +1136,46 @@ async function submitAnswer(questionId, selectedOption, isCorrect) {
 }
 
 // 9.9 실시간 답안 분포 구독 (참가자/관리자 화면 공용)
+// subscribeToQuizState와 동일한 이유로, await 이전에 동기적으로 잠금을 걸어 중복 구독을 방지합니다.
+let isSubscribingToAnswerDistribution = false;
 async function subscribeToAnswerDistribution(questionId) {
-  if (state.answerDistributionChannel) {
-    supabaseClient.removeChannel(state.answerDistributionChannel);
-    state.answerDistributionChannel = null;
+  if (isSubscribingToAnswerDistribution) return;
+  isSubscribingToAnswerDistribution = true;
+
+  try {
+    if (state.answerDistributionChannel) {
+      supabaseClient.removeChannel(state.answerDistributionChannel);
+      state.answerDistributionChannel = null;
+    }
+
+    state.answerTally = {};
+
+    const { data, error } = await supabaseClient
+      .from('quiz_answers')
+      .select('selected_option')
+      .eq('question_id', questionId);
+
+    if (!error && data) {
+      data.forEach(row => {
+        state.answerTally[row.selected_option] = (state.answerTally[row.selected_option] || 0) + 1;
+      });
+    }
+
+    renderAnswerDistribution();
+
+    state.answerDistributionChannel = supabaseClient
+      .channel(`answer_distribution_${questionId}`)
+      .on('postgres_changes', {
+        event: 'INSERT', schema: 'public', table: 'quiz_answers', filter: `question_id=eq.${questionId}`
+      }, (payload) => {
+        const opt = payload.new.selected_option;
+        state.answerTally[opt] = (state.answerTally[opt] || 0) + 1;
+        renderAnswerDistribution();
+      })
+      .subscribe();
+  } finally {
+    isSubscribingToAnswerDistribution = false;
   }
-
-  state.answerTally = {};
-
-  const { data, error } = await supabaseClient
-    .from('quiz_answers')
-    .select('selected_option')
-    .eq('question_id', questionId);
-
-  if (!error && data) {
-    data.forEach(row => {
-      state.answerTally[row.selected_option] = (state.answerTally[row.selected_option] || 0) + 1;
-    });
-  }
-
-  renderAnswerDistribution();
-
-  state.answerDistributionChannel = supabaseClient
-    .channel(`answer_distribution_${questionId}`)
-    .on('postgres_changes', {
-      event: 'INSERT', schema: 'public', table: 'quiz_answers', filter: `question_id=eq.${questionId}`
-    }, (payload) => {
-      const opt = payload.new.selected_option;
-      state.answerTally[opt] = (state.answerTally[opt] || 0) + 1;
-      renderAnswerDistribution();
-    })
-    .subscribe();
 }
 
 // 9.10 답안 분포 바 렌더 (참가자 화면 + 관리자 화면 동시 갱신)
@@ -1012,13 +1242,15 @@ async function loadLeaderboard() {
 function loadQuestion(questionRow) {
   state.currentQuestion = questionRow;
   state.isAnswered = false;
+  state.selectedOptionIdx = null;
+  state.currentTimeLimit = questionRow.time_limit || TIMER_LIMIT;
 
   // 라이브 모드에서는 문제가 실제로 활성화된 시각(activated_at) 기준으로 남은 시간을 계산합니다.
-  // 새로고침/재접속으로 이 화면에 다시 진입해도 타이머가 매번 15초로 리셋되지 않도록 하기 위함입니다.
-  let initialTimeLeft = TIMER_LIMIT;
+  // 새로고침/재접속으로 이 화면에 다시 진입해도 타이머가 매번 처음부터 리셋되지 않도록 하기 위함입니다.
+  let initialTimeLeft = state.currentTimeLimit;
   if (supabaseClient && state.session && state.activeQuestionActivatedAt) {
     const elapsedSeconds = (Date.now() - new Date(state.activeQuestionActivatedAt).getTime()) / 1000;
-    initialTimeLeft = Math.max(0, Math.ceil(TIMER_LIMIT - elapsedSeconds));
+    initialTimeLeft = Math.max(0, Math.ceil(state.currentTimeLimit - elapsedSeconds));
   }
   state.timeLeft = initialTimeLeft;
 
@@ -1048,6 +1280,8 @@ function loadQuestion(questionRow) {
     elements.optionsContainer.appendChild(optionBtn);
   });
 
+  elements.submitAnswerBtn.disabled = true;
+  elements.submitAnswerBtn.textContent = "제출하기";
   elements.answerDistribution.innerHTML = "";
   elements.quizFooterMessage.textContent = "";
 
@@ -1066,11 +1300,11 @@ function loadQuestion(questionRow) {
 function startTimer() {
   clearInterval(state.timerInterval);
   updateTimerUI();
-  
+
   state.timerInterval = setInterval(() => {
     state.timeLeft--;
     updateTimerUI();
-    
+
     if (state.timeLeft <= 0) {
       clearInterval(state.timerInterval);
       handleTimeout();
@@ -1080,15 +1314,16 @@ function startTimer() {
 
 function updateTimerUI() {
   elements.timerText.textContent = state.timeLeft;
-  
+
   // Dash offset calculations
-  const offset = CIRCUMFERENCE * (1 - state.timeLeft / TIMER_LIMIT);
+  const offset = CIRCUMFERENCE * (1 - state.timeLeft / state.currentTimeLimit);
   elements.timerProgress.style.strokeDashoffset = offset;
-  
-  // Change ring color dynamically depending on time left
-  if (state.timeLeft > 7) {
+
+  // Change ring color dynamically depending on time left (남은 시간의 비율 기준)
+  const ratio = state.timeLeft / state.currentTimeLimit;
+  if (ratio > 0.45) {
     elements.timerProgress.style.stroke = "#34d399"; // Mint green
-  } else if (state.timeLeft > 3) {
+  } else if (ratio > 0.2) {
     elements.timerProgress.style.stroke = "#fb923c"; // Orange
   } else {
     elements.timerProgress.style.stroke = "#f87171"; // Coral red
@@ -1100,8 +1335,36 @@ function resetTimerProgressCircle() {
   elements.timerProgress.style.stroke = "#34d399";
 }
 
-// 11. Interactive Answers Verification
+// 11. 옵션 선택 (아직 확정 아님 — "제출하기" 버튼을 눌러야 정답 처리됩니다)
 function handleSelectOption(selectedIdx, selectedBtn) {
+  if (state.isAnswered) return;
+
+  state.selectedOptionIdx = selectedIdx;
+
+  const optionButtons = elements.optionsContainer.querySelectorAll(".option-btn");
+  optionButtons.forEach(btn => btn.classList.remove("selected"));
+  selectedBtn.classList.add("selected");
+
+  elements.submitAnswerBtn.disabled = false;
+}
+
+// 11b. 제출 버튼 클릭 → 선택된 답을 확정 채점
+function handleSubmitAnswer() {
+  if (state.isAnswered) return;
+  if (state.selectedOptionIdx === null) {
+    alert("답을 선택한 후 제출해주세요.");
+    return;
+  }
+  gradeAnswer(state.selectedOptionIdx);
+}
+
+// 12. Handle Timeout — 선택해둔 답이 있으면 그대로 자동 제출, 없으면 무응답 처리
+function handleTimeout() {
+  gradeAnswer(state.selectedOptionIdx === null ? -1 : state.selectedOptionIdx);
+}
+
+// 13. 채점 확정 (제출 버튼 클릭 또는 시간초과 시 공통으로 호출)
+function gradeAnswer(selectedIdx) {
   if (state.isAnswered) return;
   state.isAnswered = true;
   clearInterval(state.timerInterval);
@@ -1112,6 +1375,7 @@ function handleSelectOption(selectedIdx, selectedBtn) {
   const isCorrect = selectedIdx === currentQuestion.correct_option;
   const optionButtons = elements.optionsContainer.querySelectorAll(".option-btn");
   const isLiveMode = !!(supabaseClient && state.session);
+  const selectedBtn = selectedIdx >= 0 ? optionButtons[selectedIdx] : null;
 
   if (isCorrect) {
     // Add success styling
@@ -1130,13 +1394,18 @@ function handleSelectOption(selectedIdx, selectedBtn) {
       elements.currentScoreText.textContent = state.score;
     }
   } else {
-    // Add wrong styling
-    selectedBtn.classList.add("wrong");
-    selectedBtn.querySelector(".option-status-icon").innerHTML = `
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" width="20" height="20">
-        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
-      </svg>
-    `;
+    if (selectedBtn) {
+      // Add wrong styling
+      selectedBtn.classList.add("wrong");
+      selectedBtn.querySelector(".option-status-icon").innerHTML = `
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" width="20" height="20">
+          <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+        </svg>
+      `;
+    } else {
+      // 아무것도 선택하지 않은 채 시간초과된 경우
+      elements.timerText.textContent = "⏱️";
+    }
 
     // Highlight the correct answer
     const correctBtn = optionButtons[currentQuestion.correct_option];
@@ -1148,39 +1417,14 @@ function handleSelectOption(selectedIdx, selectedBtn) {
     `;
   }
 
-  // Disable all options
+  // Disable all options + submit button
   optionButtons.forEach(btn => btn.disabled = true);
+  elements.submitAnswerBtn.disabled = true;
 
   finishAnswering(currentQuestion.id, selectedIdx, isCorrect);
 }
 
-// 12. Handle Timeout
-function handleTimeout() {
-  state.isAnswered = true;
-  state.answers.push(-1); // -1 indicates timeout
-
-  const currentQuestion = state.currentQuestion;
-  const optionButtons = elements.optionsContainer.querySelectorAll(".option-btn");
-
-  // Highlight the correct option
-  const correctBtn = optionButtons[currentQuestion.correct_option];
-  correctBtn.classList.add("correct");
-  correctBtn.querySelector(".option-status-icon").innerHTML = `
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" width="20" height="20">
-      <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
-    </svg>
-  `;
-
-  // Mark all buttons disabled
-  optionButtons.forEach(btn => btn.disabled = true);
-
-  // Flash red glow on timer as alert
-  elements.timerText.textContent = "⏱️";
-
-  finishAnswering(currentQuestion.id, -1, false);
-}
-
-// 13. 응답 완료 후 흐름 분기 (라이브 모드: 대기 화면 복귀 / 오프라인 모드: 다음 문제로 자동 진행)
+// 14. 응답 완료 후 흐름 분기 (라이브 모드: 대기 화면 복귀 / 오프라인 모드: 다음 문제로 자동 진행)
 function finishAnswering(questionId, selectedOption, isCorrect) {
   if (supabaseClient && state.session) {
     elements.quizFooterMessage.textContent = "응답이 제출되었습니다. 관리자가 다음 문제를 활성화할 때까지 기다려주세요...";
@@ -1207,7 +1451,7 @@ function handleNextQuestion() {
   }
 }
 
-// 14. Show Results Screen & Trigger Database Upload
+// 15. Show Results Screen & Trigger Database Upload
 async function showResults() {
   switchScreen(elements.resultScreen);
   
@@ -1340,7 +1584,7 @@ function renderReviewList() {
   });
 }
 
-// 15. Restart Logic (Returns to Lobby startContainer while keeping login session)
+// 16. Restart Logic (Returns to Lobby startContainer while keeping login session)
 function resetQuiz() {
   // Clear State
   state.offlineIdx = 0;

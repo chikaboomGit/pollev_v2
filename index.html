@@ -33,7 +33,13 @@
   <div class="glow-sphere glow-1" aria-hidden="true"></div>
   <div class="glow-sphere glow-2" aria-hidden="true"></div>
 
-  <div class="app-container">
+  <!-- 세션 복원 확인 전까지 로그인 화면이 잠깐 노출되는 깜빡임을 막기 위한 로딩 오버레이 -->
+  <div id="app-loading" class="app-loading">
+    <div class="app-loading-spinner"></div>
+    <p>세션 확인 중...</p>
+  </div>
+
+  <div id="app-container" class="app-container" style="display: none;">
     <!-- Header: App title & Theme toggle -->
     <header class="app-header">
       <div class="header-content">
@@ -160,9 +166,8 @@
         <!-- 1.2 Start Container (Shown when logged in) -->
         <div id="start-container" class="start-container" style="display: none;">
           <div class="welcome-header">
-            <div class="badge">WELCOME BACK</div>
             <h2>환영합니다, <span id="user-nickname" class="logo-accent">도전자</span>님!</h2>
-            <p>HTML, CSS, JavaScript 및 브라우저 아키텍처에 대한 흥미로운 퀴즈가 진행됩니다.</p>
+            <p id="welcome-subtitle-text">HTML, CSS, JavaScript 및 브라우저 아키텍처에 대한 흥미로운 퀴즈가 진행됩니다.</p>
           </div>
 
           <!-- 1.2a 참가자용 대기 패널 -->
@@ -178,6 +183,19 @@
           <!-- 1.2b 관리자용 문제 관리 패널 -->
           <div id="admin-panel" class="rules-box" style="display: none;">
             <h3>관리자 패널</h3>
+
+            <!-- 환영 문구 수정 폼 -->
+            <form id="welcome-message-form" class="question-form">
+              <h4>환영 문구 설정</h4>
+              <div class="input-group">
+                <label for="welcome-message-input">참가자 대기 화면에 표시될 안내 문구</label>
+                <div class="input-wrapper">
+                  <input type="text" id="welcome-message-input" placeholder="예: 오늘의 퀴즈에 오신 것을 환영합니다!" required>
+                  <span class="focus-border"></span>
+                </div>
+              </div>
+              <button type="submit" id="welcome-message-submit-btn" class="btn btn-primary">문구 저장하기</button>
+            </form>
 
             <!-- 문제 등록 폼 -->
             <form id="question-form" class="question-form">
@@ -199,14 +217,26 @@
               <div id="question-options-fields" class="question-options-fields">
                 <!-- 문제 유형에 따라 동적으로 보기/정답 라디오가 생성됩니다 -->
               </div>
-              <div class="input-group">
-                <label for="question-points-input">배점</label>
-                <div class="input-wrapper">
-                  <input type="number" id="question-points-input" min="1" value="100" required>
-                  <span class="focus-border"></span>
+              <div class="input-group-row">
+                <div class="input-group">
+                  <label for="question-points-input">배점</label>
+                  <div class="input-wrapper">
+                    <input type="number" id="question-points-input" min="1" value="100" required>
+                    <span class="focus-border"></span>
+                  </div>
+                </div>
+                <div class="input-group">
+                  <label for="question-time-limit-input">제한시간(초)</label>
+                  <div class="input-wrapper">
+                    <input type="number" id="question-time-limit-input" min="1" value="15" required>
+                    <span class="focus-border"></span>
+                  </div>
                 </div>
               </div>
-              <button type="submit" id="question-submit-btn" class="btn btn-primary">문제 등록하기</button>
+              <div class="question-form-actions">
+                <button type="submit" id="question-submit-btn" class="btn btn-primary">문제 등록하기</button>
+                <button type="button" id="question-cancel-edit-btn" class="btn btn-secondary" style="display: none;">취소</button>
+              </div>
             </form>
 
             <!-- 등록된 문제 목록 -->
@@ -254,6 +284,11 @@
         <!-- Multiple Choice Options -->
         <div id="options-container" class="options-container">
           <!-- Dynamically generated option buttons will go here -->
+        </div>
+
+        <!-- 답 제출: 옵션 선택 후 이 버튼을 눌러야 정답으로 확정됩니다 -->
+        <div class="submit-answer-box">
+          <button type="button" id="submit-answer-btn" class="btn btn-primary" disabled>제출하기</button>
         </div>
 
         <!-- 실시간 답안 분포 (참가자) -->
