@@ -142,6 +142,7 @@ const elements = {
   adminPanel: document.getElementById("admin-panel"),
   adminQuestionList: document.getElementById("admin-question-list"),
   adminDeactivateBtn: document.getElementById("admin-deactivate-btn"),
+  adminClearLastQuestionBtn: document.getElementById("admin-clear-last-question-btn"),
   adminAnswerDistribution: document.getElementById("admin-answer-distribution"),
 
   // 환영 문구 수정 폼 (관리자)
@@ -210,6 +211,7 @@ function init() {
   elements.forgotPasswordForm.addEventListener("submit", handleForgotPasswordSubmit);
   elements.recoveryForm.addEventListener("submit", handleRecoverySubmit);
   elements.adminDeactivateBtn.addEventListener("click", () => activateQuestion(null));
+  elements.adminClearLastQuestionBtn.addEventListener("click", clearLastQuestionReveal);
   elements.retryBtn.addEventListener("click", resetQuiz);
   elements.themeToggleBtn.addEventListener("click", toggleTheme);
   elements.questionForm.addEventListener("submit", handleQuestionFormSubmit);
@@ -1199,6 +1201,29 @@ async function activateQuestion(questionId) {
     if (error) throw error;
   } catch (err) {
     alert("문제 활성화 실패: " + err.message);
+  }
+}
+
+// 9.7b 관리자: "마지막 문제 리뷰"용 DB 값을 초기화해, 참가자 대기 화면에서
+// 마지막으로 풀었던 문제와 정답 공개가 더 이상 노출되지 않도록 합니다.
+async function clearLastQuestionReveal() {
+  const proceed = confirm("마지막으로 공개됐던 문제와 정답을 참가자 화면에서 더 이상 볼 수 없도록 초기화합니다. 계속하시겠습니까?");
+  if (!proceed) return;
+
+  try {
+    const { error } = await supabaseClient
+      .from('quiz_state')
+      .update({ last_question_id: null, last_activated_at: null })
+      .eq('id', 1);
+
+    if (error) throw error;
+
+    state.lastQuestionId = null;
+    state.lastActivatedAt = null;
+    alert("마지막 문제 공개가 초기화되었습니다.");
+  } catch (err) {
+    console.error("마지막 문제 초기화 실패:", err);
+    alert("초기화에 실패했습니다: " + err.message);
   }
 }
 
