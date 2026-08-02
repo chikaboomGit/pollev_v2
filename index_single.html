@@ -1,0 +1,2228 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <!-- Favicon -->
+  <link rel="icon" href="data:,">
+  
+  <!-- SEO Meta Tags -->
+  <title>프론트엔드 개발자 상식 퀴즈 (One Quiz)</title>
+  <meta name="description" content="자신의 웹 개발 및 프론트엔드 지식을 세련된 네온 테마의 퀴즈로 테스트해보세요. 바닐라 자바스크립트로 구현된 반응형 퀴즈 웹사이트입니다.">
+  <meta name="keywords" content="웹 개발, 프론트엔드, 자바스크립트 퀴즈, CSS 퀴즈, 바닐라 JS, HTML5, CSS3">
+  
+  <!-- Open Graph -->
+  <meta property="og:title" content="프론트엔드 개발자 상식 퀴즈">
+  <meta property="og:description" content="네온 Cyberpunk 스타일의 웹 개발 퀴즈로 실력을 테스트해보세요!">
+  <meta property="og:type" content="website">
+  
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
+  
+  <style>
+    /* Custom Styles for One Quiz */
+
+    /* ----------------------------------------------------
+       1. Design Tokens & CSS Variables
+    ---------------------------------------------------- */
+    :root {
+      --font-title: 'Outfit', 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+      --font-body: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+      
+      --transition-normal: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      --transition-bounce: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      
+      --radius-lg: 24px;
+      --radius-md: 16px;
+      --radius-sm: 10px;
+      
+      --container-width: 650px;
+    }
+
+    body.dark-theme {
+      --bg-app: #0b0f19;
+      --bg-gradient: radial-gradient(circle at 50% 50%, #111827 0%, #030712 100%);
+      --card-bg: rgba(17, 24, 39, 0.7);
+      --card-border: rgba(255, 255, 255, 0.08);
+      --text-main: #f3f4f6;
+      --text-muted: #9ca3af;
+      
+      --primary: #818cf8; /* Light indigo */
+      --primary-dark: #6366f1;
+      --primary-glow: rgba(99, 102, 241, 0.4);
+      --secondary: #c084fc; /* Light purple */
+      --accent: #f43f5e;
+      
+      --success: #34d399; /* Mint green */
+      --success-glow: rgba(52, 211, 153, 0.2);
+      --error: #f87171; /* Coral red */
+      --error-glow: rgba(248, 113, 113, 0.2);
+      
+      --input-bg: rgba(31, 41, 55, 0.6);
+      --input-border: rgba(255, 255, 255, 0.1);
+      --input-focus-border: #818cf8;
+      
+      --shadow-lg: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 10px 10px -5px rgba(0, 0, 0, 0.4);
+      --shadow-glow: 0 0 20px rgba(99, 102, 241, 0.15);
+      
+      --glow-sphere-1: rgba(99, 102, 241, 0.15);
+      --glow-sphere-2: rgba(192, 132, 252, 0.12);
+      
+      --option-bg: rgba(31, 41, 55, 0.4);
+      --option-hover-bg: rgba(99, 102, 241, 0.08);
+      --option-border: rgba(255, 255, 255, 0.06);
+      --option-hover-border: rgba(129, 140, 248, 0.5);
+    }
+
+    body.light-theme {
+      --bg-app: #f8fafc;
+      --bg-gradient: radial-gradient(circle at 50% 50%, #f1f5f9 0%, #e2e8f0 100%);
+      --card-bg: rgba(255, 255, 255, 0.85);
+      --card-border: rgba(0, 0, 0, 0.06);
+      --text-main: #0f172a;
+      --text-muted: #64748b;
+      
+      --primary: #4f46e5; /* Deep indigo */
+      --primary-dark: #3730a3;
+      --primary-glow: rgba(79, 70, 229, 0.25);
+      --secondary: #9333ea;
+      --accent: #e11d48;
+      
+      --success: #059669;
+      --success-glow: rgba(5, 150, 105, 0.15);
+      --error: #dc2626;
+      --error-glow: rgba(220, 38, 38, 0.15);
+      
+      --input-bg: rgba(241, 245, 249, 0.9);
+      --input-border: rgba(0, 0, 0, 0.1);
+      --input-focus-border: #4f46e5;
+      
+      --shadow-lg: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.05);
+      --shadow-glow: 0 0 20px rgba(79, 70, 229, 0.05);
+      
+      --glow-sphere-1: rgba(99, 102, 241, 0.06);
+      --glow-sphere-2: rgba(168, 85, 247, 0.05);
+      
+      --option-bg: rgba(255, 255, 255, 0.9);
+      --option-hover-bg: rgba(79, 70, 229, 0.04);
+      --option-border: rgba(0, 0, 0, 0.08);
+      --option-hover-border: rgba(79, 70, 229, 0.4);
+    }
+
+    /* ----------------------------------------------------
+       2. Global Styles & Reset
+    ---------------------------------------------------- */
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: var(--font-body);
+      color: var(--text-main);
+      background: var(--bg-app);
+      background-image: var(--bg-gradient);
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      overflow-x: hidden;
+      position: relative;
+      transition: background-color 0.5s ease, color 0.3s ease;
+    }
+
+    /* Background Glowing spheres */
+    .glow-sphere {
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(120px);
+      z-index: -1;
+      pointer-events: none;
+      transition: background-color 0.5s ease;
+    }
+
+    .glow-1 {
+      width: 400px;
+      height: 400px;
+      top: -100px;
+      left: -100px;
+      background-color: var(--glow-sphere-1);
+    }
+
+    .glow-2 {
+      width: 500px;
+      height: 500px;
+      bottom: -150px;
+      right: -100px;
+      background-color: var(--glow-sphere-2);
+    }
+
+    /* ----------------------------------------------------
+       3. Main App Container
+    ---------------------------------------------------- */
+    .app-container {
+      width: 90%;
+      max-width: var(--container-width);
+      margin: 40px auto;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    /* ----------------------------------------------------
+       4. Header Layout
+    ---------------------------------------------------- */
+    .app-header {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .header-content {
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .logo {
+      font-family: var(--font-title);
+      font-weight: 800;
+      font-size: 1.8rem;
+      letter-spacing: -0.5px;
+      background: linear-gradient(135deg, var(--primary), var(--secondary));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .logo-accent {
+      background: linear-gradient(135deg, var(--secondary), var(--primary));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      opacity: 0.9;
+    }
+
+    /* Icon Buttons (Theme toggle) */
+    .icon-btn {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      color: var(--text-main);
+      padding: 10px;
+      border-radius: 50%;
+      cursor: pointer;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      box-shadow: var(--shadow-glow);
+      transition: var(--transition-normal);
+      backdrop-filter: blur(10px);
+    }
+
+    .icon-btn:hover {
+      transform: translateY(-2px);
+      border-color: var(--primary);
+      box-shadow: 0 0 15px var(--primary-glow);
+    }
+
+    .icon-btn:active {
+      transform: translateY(0);
+    }
+
+    .sun-icon {
+      width: 20px;
+      height: 20px;
+      display: none;
+    }
+
+    .moon-icon {
+      width: 20px;
+      height: 20px;
+      display: block;
+    }
+
+    /* Toggle icon display based on active theme */
+    body.light-theme .sun-icon {
+      display: block;
+    }
+    body.light-theme .moon-icon {
+      display: none;
+    }
+
+    /* ----------------------------------------------------
+       5. Interactive Screens (Cards)
+    ---------------------------------------------------- */
+    .screen-card {
+      display: none;
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      box-shadow: var(--shadow-lg);
+      border-radius: var(--radius-lg);
+      padding: 32px;
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      transition: var(--transition-normal);
+    }
+
+    .screen-card.active {
+      display: block;
+      animation: fadeInUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    @keyframes fadeInUp {
+      from {
+        opacity: 0;
+        transform: translateY(24px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    /* Common elements inside screens */
+    .badge {
+      display: inline-block;
+      font-family: var(--font-title);
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 1px;
+      background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(168, 85, 247, 0.1));
+      border: 1px solid rgba(129, 140, 248, 0.2);
+      color: var(--primary);
+      padding: 6px 12px;
+      border-radius: 100px;
+      margin-bottom: 16px;
+    }
+
+    .screen-card h2 {
+      font-family: var(--font-title);
+      font-size: 2rem;
+      font-weight: 800;
+      line-height: 1.25;
+      margin-bottom: 12px;
+      letter-spacing: -0.5px;
+    }
+
+    .screen-card p {
+      color: var(--text-muted);
+      font-size: 1rem;
+      line-height: 1.6;
+      margin-bottom: 24px;
+    }
+
+    /* ----------------------------------------------------
+       6. Screen 1: Welcome Screen styling
+    ---------------------------------------------------- */
+    .welcome-header {
+      text-align: center;
+      margin-bottom: 24px;
+    }
+
+    .welcome-form {
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    .input-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .input-group label {
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: var(--text-main);
+      letter-spacing: 0.5px;
+    }
+
+    .input-wrapper {
+      position: relative;
+      width: 100%;
+    }
+
+    .input-wrapper input {
+      width: 100%;
+      background: var(--input-bg);
+      border: 1px solid var(--input-border);
+      color: var(--text-main);
+      padding: 14px 16px;
+      border-radius: var(--radius-sm);
+      font-size: 1rem;
+      font-family: var(--font-body);
+      outline: none;
+      transition: var(--transition-normal);
+    }
+
+    .input-wrapper input::placeholder {
+      color: var(--text-muted);
+      opacity: 0.6;
+    }
+
+    .input-wrapper input:focus {
+      border-color: var(--input-focus-border);
+      box-shadow: 0 0 10px rgba(129, 140, 248, 0.2);
+    }
+
+    .error-message {
+      color: var(--error);
+      font-size: 0.85rem;
+      font-weight: 500;
+      margin-top: 4px;
+      display: none;
+      animation: shake 0.3s ease-in-out;
+    }
+
+    .input-group.invalid .error-message {
+      display: block;
+    }
+
+    .input-group.invalid input {
+      border-color: var(--error);
+      box-shadow: 0 0 10px var(--error-glow);
+    }
+
+    .rules-box {
+      background: rgba(0, 0, 0, 0.15);
+      border-radius: var(--radius-md);
+      padding: 20px;
+      border: 1px solid rgba(255, 255, 255, 0.03);
+    }
+
+    body.light-theme .rules-box {
+      background: rgba(0, 0, 0, 0.03);
+    }
+
+    .rules-box h3 {
+      font-family: var(--font-title);
+      font-size: 1.1rem;
+      margin-bottom: 12px;
+      color: var(--primary);
+      font-weight: 700;
+    }
+
+    .rules-box ul {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .rules-box li {
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      line-height: 1.5;
+      position: relative;
+      padding-left: 18px;
+    }
+
+    .rules-box li::before {
+      content: '•';
+      color: var(--secondary);
+      position: absolute;
+      left: 4px;
+      font-weight: bold;
+    }
+
+    /* Buttons */
+    .btn {
+      font-family: var(--font-title);
+      font-size: 1rem;
+      font-weight: 700;
+      padding: 14px 28px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      border: none;
+      display: inline-flex;
+      justify-content: center;
+      align-items: center;
+      gap: 8px;
+      transition: var(--transition-bounce);
+      text-decoration: none;
+      outline: none;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--primary), var(--secondary));
+      color: #ffffff;
+      box-shadow: 0 4px 14px var(--primary-glow);
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px var(--primary-glow);
+      filter: brightness(1.1);
+    }
+
+    .btn-primary:active {
+      transform: translateY(0);
+    }
+
+    .btn-primary:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+
+    .btn-secondary {
+      background: transparent;
+      color: var(--text-main);
+      border: 1px solid var(--card-border);
+    }
+
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.05);
+      border-color: var(--text-muted);
+      transform: translateY(-2px);
+    }
+
+    body.light-theme .btn-secondary:hover {
+      background: rgba(0, 0, 0, 0.03);
+    }
+
+    .btn-secondary:active {
+      transform: translateY(0);
+    }
+
+    .btn-danger {
+      background: transparent;
+      color: var(--error);
+      border: 1px solid var(--error);
+    }
+
+    .btn-danger:hover {
+      background: var(--error-glow);
+      transform: translateY(-2px);
+      box-shadow: 0 0 15px var(--error-glow);
+    }
+
+    .btn-danger:active {
+      transform: translateY(0);
+    }
+
+    .link-btn {
+      background: none;
+      border: none;
+      color: var(--primary);
+      font-family: var(--font-title);
+      font-weight: 700;
+      cursor: pointer;
+      text-decoration: underline;
+      padding: 0 4px;
+      font-size: 0.95rem;
+      transition: var(--transition-normal);
+    }
+
+    .link-btn:hover {
+      color: var(--secondary);
+    }
+
+    .auth-toggle-box {
+      text-align: center;
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      margin-top: 16px;
+    }
+
+    .start-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-top: 24px;
+    }
+
+    /* ----------------------------------------------------
+       7. Screen 2: Quiz Screen styling
+    ---------------------------------------------------- */
+    .quiz-status-bar {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      grid-template-rows: auto auto;
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 32px;
+    }
+
+    .progress-info {
+      grid-column: 1;
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.9rem;
+      color: var(--text-muted);
+    }
+
+    .question-number strong, .score-display strong {
+      color: var(--text-main);
+    }
+
+    .progress-bar-container {
+      grid-column: 1;
+      background: rgba(255, 255, 255, 0.05);
+      height: 8px;
+      border-radius: 100px;
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.02);
+    }
+
+    body.light-theme .progress-bar-container {
+      background: rgba(0, 0, 0, 0.05);
+    }
+
+    .progress-bar {
+      height: 100%;
+      background: linear-gradient(90deg, var(--primary), var(--secondary));
+      border-radius: 100px;
+      width: 0%;
+      transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    /* Timer styles */
+    .timer-widget {
+      grid-column: 2;
+      grid-row: 1 / span 2;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      margin-left: 12px;
+    }
+
+    .timer-ring-container {
+      position: relative;
+      width: 60px;
+      height: 60px;
+    }
+
+    .timer-ring {
+      transform: rotate(-90deg);
+    }
+
+    .timer-ring__circle {
+      transition: stroke-dashoffset 0.1s linear, stroke 0.3s ease;
+    }
+
+    .timer-text {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-family: var(--font-title);
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--text-main);
+    }
+
+    /* Question Area */
+    .question-container {
+      margin-bottom: 24px;
+    }
+
+    .question-text {
+      font-size: 1.35rem !important;
+      font-weight: 600 !important;
+      line-height: 1.45 !important;
+    }
+
+    /* Options Box */
+    .options-container {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-bottom: 28px;
+    }
+
+    .option-btn {
+      background: var(--option-bg);
+      border: 1px solid var(--option-border);
+      border-radius: var(--radius-md);
+      padding: 16px 20px;
+      text-align: left;
+      font-size: 1rem;
+      color: var(--text-main);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      transition: var(--transition-normal);
+      outline: none;
+    }
+
+    .option-btn:hover {
+      background: var(--option-hover-bg);
+      border-color: var(--option-hover-border);
+      transform: translateY(-2px);
+    }
+
+    .option-btn:active {
+      transform: translateY(0);
+    }
+
+    .option-marker {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      font-family: var(--font-title);
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: var(--text-muted);
+      flex-shrink: 0;
+      transition: var(--transition-normal);
+    }
+
+    body.light-theme .option-marker {
+      background: rgba(0, 0, 0, 0.04);
+      border: 1px solid rgba(0, 0, 0, 0.06);
+    }
+
+    .option-btn:hover .option-marker {
+      border-color: var(--primary);
+      color: var(--primary);
+      background: rgba(99, 102, 241, 0.15);
+    }
+
+    .option-text {
+      flex-grow: 1;
+      font-weight: 500;
+      line-height: 1.4;
+    }
+
+    /* Option States: Correct and Wrong */
+    .option-btn.correct {
+      background: var(--success-glow) !important;
+      border-color: var(--success) !important;
+      box-shadow: 0 0 15px rgba(52, 211, 153, 0.15);
+    }
+
+    .option-btn.correct .option-marker {
+      background: var(--success) !important;
+      border-color: var(--success) !important;
+      color: #ffffff !important;
+    }
+
+    .option-btn.wrong {
+      background: var(--error-glow) !important;
+      border-color: var(--error) !important;
+      box-shadow: 0 0 15px rgba(248, 113, 113, 0.15);
+      animation: shake 0.4s ease-in-out;
+    }
+
+    .option-btn.wrong .option-marker {
+      background: var(--error) !important;
+      border-color: var(--error) !important;
+      color: #ffffff !important;
+    }
+
+    .option-btn:disabled {
+      pointer-events: none;
+    }
+
+    /* Check Icons inside options */
+    .option-status-icon {
+      width: 20px;
+      height: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      flex-shrink: 0;
+      opacity: 0;
+      transform: scale(0.5);
+      transition: var(--transition-bounce);
+    }
+
+    .option-btn.correct .option-status-icon,
+    .option-btn.wrong .option-status-icon {
+      opacity: 1;
+      transform: scale(1);
+    }
+
+    .option-btn.correct .option-status-icon {
+      color: var(--success);
+    }
+
+    .option-btn.wrong .option-status-icon {
+      color: var(--error);
+    }
+
+    /* Shake Animation */
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      20%, 60% { transform: translateX(-6px); }
+      40%, 80% { transform: translateX(6px); }
+    }
+
+    /* Footer layout inside screen */
+    .quiz-footer {
+      display: flex;
+      justify(content): flex-end;
+    }
+
+    .btn-icon-right span {
+      display: inline-block;
+    }
+
+    /* ----------------------------------------------------
+       8. Screen 3: Result Screen styling
+    ---------------------------------------------------- */
+    .result-header {
+      text-align: center;
+      margin-bottom: 24px;
+    }
+
+    .confetti-effect {
+      font-size: 3.5rem;
+      margin-bottom: 12px;
+      animation: bounceConfetti 1s infinite alternate ease-in-out;
+    }
+
+    @keyframes bounceConfetti {
+      0% { transform: scale(1) translateY(0); }
+      100% { transform: scale(1.15) translateY(-8px); }
+    }
+
+    /* Score Card */
+    .score-board-card {
+      display: flex;
+      justify-content: space-around;
+      align-items: center;
+      background: rgba(0, 0, 0, 0.15);
+      border: 1px solid rgba(255, 255, 255, 0.04);
+      border-radius: var(--radius-md);
+      padding: 24px;
+      margin-bottom: 24px;
+    }
+
+    body.light-theme .score-board-card {
+      background: rgba(0, 0, 0, 0.02);
+      border-color: rgba(0, 0, 0, 0.04);
+    }
+
+    .score-metric {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .metric-label {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .metric-value {
+      font-family: var(--font-title);
+      font-size: 2.2rem;
+      font-weight: 800;
+      background: linear-gradient(135deg, var(--primary), var(--secondary));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .score-divider {
+      width: 1px;
+      height: 50px;
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    body.light-theme .score-divider {
+      background: rgba(0, 0, 0, 0.1);
+    }
+
+    /* Rank Badge */
+    .rank-badge-box {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      background: linear-gradient(135deg, rgba(99, 102, 241, 0.08), rgba(168, 85, 247, 0.08));
+      border: 1px solid rgba(129, 140, 248, 0.15);
+      border-radius: var(--radius-md);
+      padding: 20px;
+      margin-bottom: 32px;
+    }
+
+    .badge-icon {
+      font-size: 2.2rem;
+    }
+
+    .rank-badge-box h3 {
+      font-family: var(--font-title);
+      font-size: 1.15rem;
+      margin-bottom: 4px;
+      color: var(--primary);
+      font-weight: 700;
+    }
+
+    .rank-badge-box p {
+      font-size: 0.9rem;
+      margin-bottom: 0;
+      line-height: 1.4;
+    }
+
+    /* Review / Explanations section */
+    .review-section {
+      margin-bottom: 32px;
+    }
+
+    .review-section h3 {
+      font-family: var(--font-title);
+      font-size: 1.25rem;
+      font-weight: 700;
+      margin-bottom: 16px;
+      color: var(--text-main);
+      border-left: 4px solid var(--primary);
+      padding-left: 10px;
+    }
+
+    .review-list {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .review-item {
+      background: rgba(0, 0, 0, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.03);
+      border-radius: var(--radius-sm);
+      overflow: hidden;
+      transition: var(--transition-normal);
+    }
+
+    body.light-theme .review-item {
+      background: rgba(255, 255, 255, 0.5);
+      border-color: rgba(0, 0, 0, 0.04);
+    }
+
+    /* Accordion header */
+    .review-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .review-header-title {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-weight: 600;
+      font-size: 0.95rem;
+    }
+
+    .review-status-badge {
+      padding: 3px 8px;
+      font-size: 0.75rem;
+      border-radius: 4px;
+      font-weight: 700;
+    }
+
+    .review-status-badge.correct {
+      background: rgba(52, 211, 153, 0.15);
+      color: var(--success);
+    }
+
+    .review-status-badge.wrong {
+      background: rgba(248, 113, 113, 0.15);
+      color: var(--error);
+    }
+
+    .review-toggle-icon {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      transition: var(--transition-normal);
+    }
+
+    /* Accordion expanded body */
+    .review-body {
+      display: none;
+      padding: 16px;
+      border-top: 1px solid rgba(255, 255, 255, 0.03);
+      background: rgba(0, 0, 0, 0.1);
+    }
+
+    body.light-theme .review-body {
+      border-top-color: rgba(0, 0, 0, 0.03);
+      background: rgba(0, 0, 0, 0.01);
+    }
+
+    .review-item.expanded .review-body {
+      display: block;
+    }
+
+    .review-item.expanded .review-toggle-icon {
+      transform: rotate(180deg);
+    }
+
+    .review-body p {
+      font-size: 0.9rem;
+      margin-bottom: 8px;
+    }
+
+    .review-body p:last-child {
+      margin-bottom: 0;
+    }
+
+    .review-body strong {
+      color: var(--text-main);
+    }
+
+    .explanation-box {
+      margin-top: 12px;
+      padding: 12px;
+      border-radius: 6px;
+      background: rgba(99, 102, 241, 0.05);
+      border-left: 3px solid var(--primary);
+      font-style: italic;
+    }
+
+    .result-actions {
+      display: flex;
+      justify-content: center;
+    }
+
+    .result-actions .btn {
+      width: 100%;
+    }
+
+    /* ----------------------------------------------------
+       9. Footer layout
+    ---------------------------------------------------- */
+    .app-footer {
+      text-align: center;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      opacity: 0.8;
+      padding: 16px 0;
+    }
+
+    /* ----------------------------------------------------
+       10. Responsiveness / Mobile Adaptability
+    ---------------------------------------------------- */
+    @media (max-width: 600px) {
+      /* Prevent horizontal overflow on body */
+      body {
+        -webkit-tap-highlight-color: transparent;
+        padding: 10px 0;
+      }
+
+      .glow-sphere {
+        filter: blur(80px); /* Lower blur for performance on low-end mobile devices */
+      }
+      .glow-1 {
+        width: 250px;
+        height: 250px;
+      }
+      .glow-2 {
+        width: 300px;
+        height: 300px;
+      }
+
+      .app-container {
+        width: 92%;
+        margin: 16px auto;
+        gap: 16px;
+      }
+      
+      .screen-card {
+        padding: 20px 16px;
+        border-radius: var(--radius-md);
+      }
+      
+      .screen-card h2 {
+        font-size: 1.5rem;
+        margin-bottom: 8px;
+      }
+      
+      .screen-card p {
+        font-size: 0.95rem;
+        margin-bottom: 16px;
+      }
+
+      /* 웰컴 인풋 높이 및 여백 모바일 조절 */
+      .input-wrapper input {
+        padding: 12px 14px;
+        font-size: 0.95rem;
+      }
+
+      .rules-box {
+        padding: 16px;
+      }
+      
+      /* 퀴즈 상단 상태바 */
+      .quiz-status-bar {
+        gap: 8px;
+        margin-bottom: 20px;
+        grid-template-columns: 1fr auto;
+        grid-template-rows: auto auto;
+      }
+
+      .progress-info {
+        font-size: 0.85rem;
+      }
+
+      /* 모바일 환경 터치 피드백을 위한 옵션 레이아웃 보완 */
+      .options-container {
+        gap: 10px;
+        margin-bottom: 20px;
+      }
+
+      .option-btn {
+        padding: 14px 16px;
+        font-size: 0.9rem;
+        min-height: 52px; /* Minimum touch target height for mobile ergonomics */
+        align-items: center; /* Vertical center alignment */
+      }
+
+      .option-marker {
+        width: 26px;
+        height: 26px;
+        font-size: 0.8rem;
+      }
+
+      .question-text {
+        font-size: 1.15rem !important;
+        line-height: 1.4 !important;
+      }
+
+      /* 결과 화면 스코어 보드 반응형 조정 (가로폭이 너무 좁을 시 세로 배치) */
+      .score-board-card {
+        padding: 16px;
+        gap: 12px;
+      }
+
+      @media (max-width: 400px) {
+        .score-board-card {
+          flex-direction: column;
+          gap: 16px;
+        }
+        .score-divider {
+          width: 80%;
+          height: 1px;
+          margin: 4px 0;
+          background: rgba(255, 255, 255, 0.1);
+        }
+        body.light-theme .score-divider {
+          background: rgba(0, 0, 0, 0.1);
+        }
+      }
+      
+      .metric-value {
+        font-size: 1.6rem;
+      }
+
+      .rank-badge-box {
+        padding: 16px;
+        gap: 12px;
+        margin-bottom: 24px;
+      }
+
+      .badge-icon {
+        font-size: 1.8rem;
+      }
+
+      .rank-badge-box h3 {
+        font-size: 1rem;
+      }
+
+      .rank-badge-box p {
+        font-size: 0.85rem;
+      }
+
+      /* 리뷰 오답 아코디언 모바일 패딩 */
+      .review-header {
+        padding: 12px;
+      }
+
+      .review-header-title {
+        font-size: 0.85rem;
+        gap: 8px;
+      }
+
+      .review-body {
+        padding: 12px;
+      }
+
+      .review-body p {
+        font-size: 0.85rem;
+      }
+
+      .explanation-box {
+        padding: 10px;
+        font-size: 0.8rem;
+      }
+      
+      .timer-ring-container {
+        width: 48px;
+        height: 48px;
+      }
+      
+      .timer-ring {
+        width: 48px;
+        height: 48px;
+      }
+      
+      .timer-text {
+        font-size: 0.9rem;
+      }
+    }
+  </style>
+  <!-- Supabase JS Client SDK -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body class="dark-theme">
+  <!-- Background Glow Effects -->
+  <div class="glow-sphere glow-1" aria-hidden="true"></div>
+  <div class="glow-sphere glow-2" aria-hidden="true"></div>
+
+  <div class="app-container">
+    <!-- Header: App title & Theme toggle -->
+    <header class="app-header">
+      <div class="header-content">
+        <h1 class="logo">One <span class="logo-accent">Quiz</span></h1>
+        <button id="theme-toggle-btn" class="icon-btn" aria-label="테마 전환">
+          <!-- Light theme icon (sun) -->
+          <svg class="sun-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707m0-12.728l.707.707m12.728 12.728l.707.707M12 8a4 4 0 100 8 4 4 0 000-8z" />
+          </svg>
+          <!-- Dark theme icon (moon) -->
+          <svg class="moon-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="main-content">
+      
+      <!-- Screen 1: Welcome & Auth Screen -->
+      <section id="welcome-screen" class="screen-card active">
+        
+        <!-- 1.1 Auth Container (Shown when logged out) -->
+        <div id="auth-container" class="auth-container">
+          <div class="welcome-header">
+            <div class="badge">SIGN IN / SIGN UP</div>
+            <h2 id="auth-title">로그인</h2>
+            <p id="auth-subtitle">퀴즈를 풀고 결과를 기록하려면 로그인이 필요합니다.</p>
+          </div>
+
+          <form id="auth-form" class="welcome-form" novalidate>
+            <!-- Username: 가입 모드에서만 동적으로 보임 -->
+            <div class="input-group" id="auth-username-group" style="display: none;">
+              <label for="auth-username">닉네임</label>
+              <div class="input-wrapper">
+                <input type="text" id="auth-username" placeholder="사용할 닉네임을 입력하세요">
+                <span class="focus-border"></span>
+              </div>
+              <p id="auth-username-error" class="error-message" role="alert">닉네임은 2자 이상 15자 이하로 입력해주세요.</p>
+            </div>
+
+            <!-- Email -->
+            <div class="input-group" id="auth-email-group">
+              <label for="auth-email">이메일</label>
+              <div class="input-wrapper">
+                <input type="email" id="auth-email" placeholder="이메일 주소를 입력하세요" required>
+                <span class="focus-border"></span>
+              </div>
+              <p id="auth-email-error" class="error-message" role="alert">올바른 이메일 주소를 입력해주세요.</p>
+            </div>
+
+            <!-- Password -->
+            <div class="input-group" id="auth-password-group">
+              <label for="auth-password">비밀번호</label>
+              <div class="input-wrapper">
+                <input type="password" id="auth-password" placeholder="비밀번호를 입력하세요 (6자 이상)" required minlength="6">
+                <span class="focus-border"></span>
+              </div>
+              <p id="auth-password-error" class="error-message" role="alert">비밀번호는 6자 이상이어야 합니다.</p>
+            </div>
+
+            <button type="submit" id="auth-submit-btn" class="btn btn-primary">로그인하기</button>
+            
+            <div class="auth-toggle-box">
+              <span id="auth-toggle-text">계정이 없으신가요?</span>
+              <button type="button" id="auth-toggle-btn" class="link-btn">회원가입</button>
+            </div>
+          </form>
+        </div>
+
+        <!-- 1.2 Start Container (Shown when logged in) -->
+        <div id="start-container" class="start-container" style="display: none;">
+          <div class="welcome-header">
+            <div class="badge">WELCOME BACK</div>
+            <h2>환영합니다, <span id="user-nickname" class="logo-accent">도전자</span>님!</h2>
+            <p>HTML, CSS, JavaScript 및 브라우저 아키텍처에 대한 흥미로운 10개의 퀴즈가 기다리고 있습니다.</p>
+          </div>
+
+          <div class="rules-box">
+            <h3>퀴즈 규칙</h3>
+            <ul>
+              <li>총 문항은 <strong>10문항</strong>입니다.</li>
+              <li>각 문항당 시간 제한은 <strong>15초</strong>입니다.</li>
+              <li>시간이 초과되면 해당 문항은 오답 처리되며 다음 단계로 이동합니다.</li>
+              <li>문항 정답을 맞추면 남은 시간에 비례하여 추가 보너스 점수를 얻습니다!</li>
+              <li>퀴즈를 마치면 점수 기록이 Supabase DB에 자동 저장됩니다.</li>
+            </ul>
+          </div>
+
+          <div class="start-actions">
+            <button type="button" id="start-btn" class="btn btn-primary">퀴즈 시작하기</button>
+            <button type="button" id="logout-btn" class="btn btn-secondary">로그아웃</button>
+            <button type="button" id="withdraw-btn" class="btn btn-danger" style="display: none;">회원 탈퇴</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Screen 2: Quiz Screen -->
+      <section id="quiz-screen" class="screen-card">
+        <!-- Progress and Timer header -->
+        <div class="quiz-status-bar">
+          <div class="progress-info">
+            <span class="question-number">Question <strong id="current-question-idx">1</strong> of <strong id="total-questions-cnt">10</strong></span>
+            <span class="score-display">Score: <strong id="current-score">0</strong></span>
+          </div>
+          <div class="progress-bar-container">
+            <div id="progress-bar" class="progress-bar" style="width: 10%;"></div>
+          </div>
+          
+          <!-- Timer widget -->
+          <div class="timer-widget">
+            <div class="timer-ring-container">
+              <svg class="timer-ring" width="60" height="60">
+                <circle class="timer-ring__circle-bg" stroke="rgba(255, 255, 255, 0.1)" stroke-width="4" fill="transparent" r="26" cx="30" cy="30" />
+                <circle id="timer-progress" class="timer-ring__circle" stroke="#818cf8" stroke-width="4" fill="transparent" r="26" cx="30" cy="30" stroke-dasharray="163.36" stroke-dashoffset="0" />
+              </svg>
+              <div id="timer-text" class="timer-text">15</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Question Area -->
+        <div class="question-container">
+          <h2 id="question-text" class="question-text">질문 텍스트가 로드 중입니다...</h2>
+        </div>
+
+        <!-- Multiple Choice Options -->
+        <div id="options-container" class="options-container">
+          <!-- Dynamically generated option buttons will go here -->
+        </div>
+
+        <!-- Quiz Footer Actions -->
+        <div class="quiz-footer">
+          <button id="next-btn" class="btn btn-primary btn-icon-right" disabled>
+            <span>다음 문제</span>
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" width="18" height="18">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
+        </div>
+      </section>
+
+      <!-- Screen 3: Result Screen -->
+      <section id="result-screen" class="screen-card">
+        <div class="result-header">
+          <div class="confetti-effect">🎉</div>
+          <h2>퀴즈 완료!</h2>
+          <p id="result-greeting">도전자님의 성적표입니다.</p>
+        </div>
+
+        <!-- Score Board -->
+        <div class="score-board-card">
+          <div class="score-metric">
+            <span class="metric-label">최종 점수</span>
+            <span id="final-score" class="metric-value">0</span>
+          </div>
+          <div class="score-divider"></div>
+          <div class="score-metric">
+            <span class="metric-label">정답률</span>
+            <span id="correct-ratio" class="metric-value">0/10</span>
+          </div>
+        </div>
+
+        <!-- Performance Review / Badge -->
+        <div class="rank-badge-box">
+          <span class="badge-icon">🏆</span>
+          <div>
+            <h3 id="rank-title">웹 마스터 (Web Master)</h3>
+            <p id="rank-desc">엄청난 지식의 소유자이시군요! 완벽에 가까운 결과입니다.</p>
+          </div>
+        </div>
+
+        <!-- Question review / Explanations -->
+        <div class="review-section">
+          <h3>문항별 정답 및 해설</h3>
+          <div id="review-list" class="review-list">
+            <!-- Dynamically populated review items -->
+          </div>
+        </div>
+
+        <!-- Action buttons -->
+        <div class="result-actions">
+          <button id="retry-btn" class="btn btn-secondary">다시 도전하기</button>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="app-footer">
+      <p>&copy; 2026 One Quiz. Developed with pure Vanilla HTML/CSS/JS.</p>
+    </footer>
+  </div>
+
+  <script>
+    /**
+     * One Quiz App - Pure Vanilla JS
+     */
+
+    // Supabase Configuration Constants
+    // 실시간 사용자 인증 및 결과 기록을 위해 본인의 Supabase URL과 Anon Key로 변경해주세요.
+    const SUPABASE_URL = "YOUR_SUPABASE_URL";
+    const SUPABASE_ANON_KEY = "YOUR_SUPABASE_ANON_KEY";
+
+    let supabaseClient = null;
+
+    // 1. Quiz Data Model (10 frontend-focused trivia questions)
+    const quizData = [
+      {
+        id: 1,
+        question: "JavaScript에서 'typeof null'의 결과는 무엇인가요?",
+        options: ["\"null\"", "\"undefined\"", "\"object\"", "\"function\""],
+        answer: 2,
+        explanation: "JavaScript의 오래된 역사적 버그로 인해 `typeof null`은 `'object'`를 반환합니다. 이는 하위 호환성을 위해 수정되지 않고 표준으로 유지되고 있습니다."
+      },
+      {
+        id: 2,
+        question: "HTML5의 시맨틱(Semantic) 태그가 아닌 것은 무엇인가요?",
+        options: ["<section>", "<div>", "<article>", "<header>"],
+        answer: 1,
+        explanation: "`<div>`와 `<span>`은 의미를 갖지 않는(non-semantic) 대표적인 태그로, 순수하게 스타일링이나 레이아웃 구분을 위해 사용됩니다. 반면 `<section>`, `<article>`, `<header>` 등은 문서 구조에 명확한 의미를 부여합니다."
+      },
+      {
+        id: 3,
+        question: "CSS 박스 모델(Box Model)에서 테두리(Border)와 콘텐츠(Content) 사이의 여백은 무엇인가요?",
+        options: ["Margin", "Padding", "Outline", "Spacing"],
+        answer: 1,
+        explanation: "콘텐츠와 테두리(Border) 사이의 안쪽 여백은 `Padding`이며, 테두리 바깥쪽의 다른 요소와의 여백은 `Margin`입니다."
+      },
+      {
+        id: 4,
+        question: "JavaScript에서 동등(==) 연산자와 일치(===) 연산자의 차이점은 무엇인가요?",
+        options: [
+          "차이점이 없으며 서로 대체 가능합니다.",
+          "==는 값만 비교하고, ===는 값과 데이터 타입(Type)을 모두 비교합니다.",
+          "===는 값만 비교하고, ==는 값과 데이터 타입을 모두 비교합니다.",
+          "==는 객체만 비교할 수 있고, ===는 원시 값만 비교할 수 있습니다."
+        ],
+        answer: 1,
+        explanation: "`==`(동등 연산자)는 비교 전 암묵적 타입 변환(Type Coercion)을 거쳐 값만 비교하지만, `===`(일치 연산자)는 타입 변환 없이 값과 타입이 모두 같아야 참(`true`)을 반환하므로 더 권장됩니다."
+      },
+      {
+        id: 5,
+        question: "브라우저 저장소 중 세션이 종료(창을 닫음)되어도 데이터가 사라지지 않고, 도메인당 약 5MB의 용량을 제공하는 것은 무엇인가요?",
+        options: ["SessionStorage", "Cookie", "LocalStorage", "Cache API"],
+        answer: 2,
+        explanation: "`LocalStorage`는 수동으로 지우지 않는 한 만료 기한 없이 브라우저에 데이터를 영구 보존하며 도메인별 약 5MB의 용량을 제공합니다. 반면 `SessionStorage`는 창을 닫으면 소멸됩니다."
+      },
+      {
+        id: 6,
+        question: "Flexbox 레이아웃에서 주축(Main Axis)과 교차축(Cross Axis) 모두에서 아이템을 정중앙에 정렬하기 위한 올바른 속성 조합은?",
+        options: [
+          "justify-content: center; align-content: center;",
+          "text-align: center; vertical-align: middle;",
+          "align-items: center; align-content: center;",
+          "justify-content: center; align-items: center;"
+        ],
+        answer: 3,
+        explanation: "Flex 컨테이너에서 `justify-content: center`는 주축(가로) 정렬을, `align-items: center`는 교차축(세로) 정렬을 중앙으로 지정하여 요소를 화면 정중앙에 배치합니다."
+      },
+      {
+        id: 7,
+        question: "JavaScript에서 이벤트 버블링(상위 요소로 이벤트가 전파되는 것)을 명시적으로 중단시키는 메서드는 무엇인가요?",
+        options: ["event.preventDefault()", "event.stopPropagation()", "event.stopImmediatePropagation()", "event.releaseEvents()"],
+        answer: 1,
+        explanation: "`event.stopPropagation()`은 현재 이벤트가 캡처링/버블링 단계에서 더 이상 다른 DOM 요소를 타고 전파되지 않도록 차단합니다. 참고로 `preventDefault()`는 브라우저의 기본 동작(예: 링크 이동)을 방지합니다."
+      },
+      {
+        id: 8,
+        question: "HTTP 응답 상태 코드 중에서 '403 Forbidden'이 의미하는 바는 무엇인가요?",
+        options: [
+          "요청한 리소스를 찾을 수 없음 (Not Found)",
+          "서버 내부 오류가 발생함 (Internal Server Error)",
+          "클라이언트가 누구인지 인증되지 않음 (Unauthorized)",
+          "서버가 요청을 이해했으나 권한이 없어 승인을 거부함 (Forbidden)"
+        ],
+        answer: 3,
+        explanation: "403 Forbidden은 서버가 요청을 이해했지만, 해당 클라이언트가 콘텐츠에 접근할 권한이 없음을 뜻합니다. 401 Unauthorized는 인증(Authentication) 자체가 실패했을 때 주로 발생합니다."
+      },
+      {
+        id: 9,
+        question: "CSS에서 'position: absolute'로 선언된 요소의 배치 기준(Containing Block)이 되는 조상은 무엇인가요?",
+        options: [
+          "언제나 최상위 브라우저 뷰포트(Viewport)",
+          "position 속성이 static이 아닌(relative, absolute, fixed 등) 가장 가까운 조상 요소",
+          "직계 부모(Parent) 요소",
+          "display 속성이 block인 가장 가까운 조상 요소"
+        ],
+        answer: 1,
+        explanation: "`position: absolute`는 조상 요소들 중 `position` 속성이 `static`이 아닌(즉, `relative`, `absolute`, `fixed` 등) 가장 가까운 조상 요소를 기준으로 배치됩니다. 만약 해당하는 조상이 없다면 최상위 `html` 요소를 기준으로 삼습니다."
+      },
+      {
+        id: 10,
+        question: "JavaScript에서 비동기 작업의 최종 완료 또는 실패와 그 결과값을 나타내는, Pending / Fulfilled / Rejected 상태를 가지는 객체는?",
+        options: ["Callback", "Observable", "Promise", "Generator"],
+        answer: 2,
+        explanation: "`Promise` 객체는 비동기 연산의 현재 상태(대기: Pending, 이행: Fulfilled, 거부: Rejected)를 캡슐화하여 비동기 흐름을 체계적으로 다룰 수 있게 해주는 ES6 표준 객체입니다."
+      }
+    ];
+
+    // 2. Application State Variables
+    let state = {
+      session: null,
+      username: "",
+      currentQuestionIdx: 0,
+      score: 0,
+      answers: [], // Stores index of selected options, -1 for timeout
+      timeLeft: 15,
+      timerInterval: null,
+      isAnswered: false,
+      isSignUpMode: false // Toggle between Login and Signup mode
+    };
+
+    // SVG Dash offset variables for Timer Circle (radius r = 26, circumference = ~163.36)
+    const TIMER_LIMIT = 15;
+    const CIRCUMFERENCE = 163.36;
+
+    // 3. DOM Elements Cache
+    const elements = {
+      themeToggleBtn: document.getElementById("theme-toggle-btn"),
+      
+      // Screens
+      welcomeScreen: document.getElementById("welcome-screen"),
+      quizScreen: document.getElementById("quiz-screen"),
+      resultScreen: document.getElementById("result-screen"),
+      
+      // Welcome & Auth Containers
+      authContainer: document.getElementById("auth-container"),
+      startContainer: document.getElementById("start-container"),
+      authForm: document.getElementById("auth-form"),
+      authTitle: document.getElementById("auth-title"),
+      authSubtitle: document.getElementById("auth-subtitle"),
+      authUsernameGroup: document.getElementById("auth-username-group"),
+      authUsernameInput: document.getElementById("auth-username"),
+      authUsernameError: document.getElementById("auth-username-error"),
+      authEmailInput: document.getElementById("auth-email"),
+      authEmailError: document.getElementById("auth-email-error"),
+      authPasswordInput: document.getElementById("auth-password"),
+      authPasswordError: document.getElementById("auth-password-error"),
+      authSubmitBtn: document.getElementById("auth-submit-btn"),
+      authToggleBtn: document.getElementById("auth-toggle-btn"),
+      authToggleText: document.getElementById("auth-toggle-text"),
+      
+      // Start Container (Lobby)
+      userNickname: document.getElementById("user-nickname"),
+      startBtn: document.getElementById("start-btn"),
+      logoutBtn: document.getElementById("logout-btn"),
+      withdrawBtn: document.getElementById("withdraw-btn"),
+      
+      // Quiz Screen Elements
+      currentQuestionIdxText: document.getElementById("current-question-idx"),
+      totalQuestionsCntText: document.getElementById("total-questions-cnt"),
+      currentScoreText: document.getElementById("current-score"),
+      progressBar: document.getElementById("progress-bar"),
+      timerText: document.getElementById("timer-text"),
+      timerProgress: document.getElementById("timer-progress"),
+      questionText: document.getElementById("question-text"),
+      optionsContainer: document.getElementById("options-container"),
+      nextBtn: document.getElementById("next-btn"),
+      
+      // Result Screen Elements
+      resultGreeting: document.getElementById("result-greeting"),
+      finalScoreText: document.getElementById("final-score"),
+      correctRatioText: document.getElementById("correct-ratio"),
+      rankTitleText: document.getElementById("rank-title"),
+      rankDescText: document.getElementById("rank-desc"),
+      reviewList: document.getElementById("review-list"),
+      retryBtn: document.getElementById("retry-btn")
+    };
+
+    // 4. Initializer Function
+    function init() {
+      // Bind Events
+      elements.authForm.addEventListener("submit", handleAuthSubmit);
+      elements.authToggleBtn.addEventListener("click", toggleAuthMode);
+      elements.startBtn.addEventListener("click", handleStartQuiz);
+      elements.logoutBtn.addEventListener("click", handleLogout);
+      elements.withdrawBtn.addEventListener("click", handleWithdraw);
+      elements.nextBtn.addEventListener("click", handleNextQuestion);
+      elements.retryBtn.addEventListener("click", resetQuiz);
+      elements.themeToggleBtn.addEventListener("click", toggleTheme);
+      
+      // Restore Theme Preferences from localStorage
+      try {
+        const savedTheme = localStorage.getItem("theme");
+        if (savedTheme === "light") {
+          document.body.classList.remove("dark-theme");
+          document.body.classList.add("light-theme");
+        } else {
+          document.body.classList.add("dark-theme");
+          document.body.classList.remove("light-theme");
+        }
+      } catch (e) {
+        document.body.classList.add("dark-theme");
+      }
+
+      // Set total count UI
+      elements.totalQuestionsCntText.textContent = quizData.length;
+
+      // Supabase Setup
+      const isSupabaseReady = setupSupabase();
+      if (isSupabaseReady) {
+        // Listen for Auth changes
+        supabaseClient.auth.onAuthStateChange(async (event, session) => {
+          state.session = session;
+          if (session) {
+            // User logged in
+            // DB 조회가 완료될 때까지 기다리지 않고 화면 전환을 먼저 처리하여 UI가 "로그인 중..."에 멈추는 현상을 방지합니다.
+            elements.authContainer.style.display = "none";
+            elements.startContainer.style.display = "block";
+            elements.withdrawBtn.style.display = "inline-block"; // 회원 탈퇴 버튼 노출
+            
+            fetchUserProfile(session.user.id);
+          } else {
+            // User logged out
+            state.username = "";
+            elements.userNickname.textContent = "";
+            elements.authContainer.style.display = "block";
+            elements.startContainer.style.display = "none";
+            elements.withdrawBtn.style.display = "none"; // 회원 탈퇴 버튼 숨김
+            elements.withdrawBtn.disabled = false;        // 탈퇴 버튼 상태 초기화
+            elements.withdrawBtn.textContent = "회원 탈퇴"; // 탈퇴 버튼 텍스트 초기화
+            
+            // 로그아웃 시 로그인 폼 상태를 '로그인 모드'로 리셋
+            if (state.isSignUpMode) {
+              toggleAuthMode();
+            }
+          }
+        });
+      } else {
+        // Supabase가 없을 경우 로컬 대체 처리 (오프라인 모드)
+        setupOfflineMode();
+      }
+    }
+
+    // 5. Offline Fallback Mode Setup
+    function setupOfflineMode() {
+      elements.authTitle.textContent = "오프라인 도전자 등록";
+      elements.authSubtitle.textContent = "Supabase API Key가 감지되지 않아 로컬 저장 모드로 진행합니다.";
+      elements.authUsernameGroup.style.display = "block";
+      elements.authUsernameInput.required = true;
+      
+      // Hide Email and Password for offline simplicity
+      elements.authForm.querySelector("#auth-email-group").style.display = "none";
+      elements.authForm.querySelector("#auth-password-group").style.display = "none";
+      elements.authSubmitBtn.textContent = "도전 등록하기";
+      elements.authForm.querySelector(".auth-toggle-box").style.display = "none";
+    }
+
+    // Supabase Init Checker
+    function setupSupabase() {
+      if (SUPABASE_URL === "YOUR_SUPABASE_URL" || SUPABASE_ANON_KEY === "YOUR_SUPABASE_ANON_KEY") {
+        console.warn("Supabase URL 및 API Key가 기본값입니다. 로컬 오프라인 모드로 자동 전환합니다.");
+        
+        const notice = document.createElement("div");
+        notice.style.background = "rgba(239, 68, 68, 0.15)";
+        notice.style.border = "1px solid var(--error)";
+        notice.style.color = "var(--error)";
+        notice.style.padding = "12px";
+        notice.style.borderRadius = "8px";
+        notice.style.marginBottom = "16px";
+        notice.style.fontSize = "0.85rem";
+        notice.innerHTML = `<strong>⚠️ Supabase 연동 필요</strong><br>app.js 파일의 최상단에서 SUPABASE_URL과 SUPABASE_ANON_KEY 변수를 실제 키로 수정하시면 실시간 가입과 결과 적재가 시작됩니다.`;
+        elements.authContainer.insertBefore(notice, elements.authForm);
+        return false;
+      }
+      
+      try {
+        supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        return true;
+      } catch (err) {
+        console.error("Supabase 초기화 실패:", err);
+        return false;
+      }
+    }
+
+    // Fetch Profile Username
+    async function fetchUserProfile(uuid) {
+      try {
+        const { data, error } = await supabaseClient
+          .from('profiles')
+          .select('username')
+          .eq('id', uuid)
+          .single();
+        
+        if (error) throw error;
+        state.username = data.username || "도전자";
+        elements.userNickname.textContent = state.username;
+      } catch (err) {
+        console.error("사용자 정보 가져오기 실패:", err);
+        // session과 user 객체가 존재하는지 안전하게 체크
+        if (state.session && state.session.user && state.session.user.email) {
+          state.username = state.session.user.email.split("@")[0];
+        } else {
+          state.username = "도전자";
+        }
+        elements.userNickname.textContent = state.username;
+      }
+    }
+
+    // 6. Authentication Handlers
+    async function handleAuthSubmit(e) {
+      e.preventDefault();
+      
+      // Offline fallback submit
+      if (!supabaseClient) {
+        const offlineName = elements.authUsernameInput.value.trim();
+        if (offlineName.length < 2 || offlineName.length > 15) {
+          elements.authUsernameGroup.classList.add("invalid");
+          elements.authUsernameError.style.display = "block";
+          return;
+        }
+        state.username = offlineName;
+        elements.userNickname.textContent = offlineName;
+        elements.authContainer.style.display = "none";
+        elements.startContainer.style.display = "block";
+        return;
+      }
+      
+      const email = elements.authEmailInput.value.trim();
+      const password = elements.authPasswordInput.value;
+      
+      // Clean validation styles
+      clearInputErrors();
+      
+      if (state.isSignUpMode) {
+        const username = elements.authUsernameInput.value.trim();
+        if (username.length < 2 || username.length > 15) {
+          elements.authUsernameGroup.classList.add("invalid");
+          elements.authUsernameError.textContent = "닉네임은 2자 이상 15자 이하로 입력해주세요.";
+          elements.authUsernameError.style.display = "block";
+          alert("닉네임은 2자 이상 15자 이하로 입력해주세요.");
+          return;
+        }
+        if (!validateEmail(email)) {
+          document.getElementById("auth-email-group").classList.add("invalid");
+          elements.authEmailError.style.display = "block";
+          alert("올바른 이메일 형식을 입력해주세요 (예: user@example.com).");
+          return;
+        }
+        if (password.length < 6) {
+          document.getElementById("auth-password-group").classList.add("invalid");
+          elements.authPasswordError.style.display = "block";
+          alert("비밀번호는 최소 6자 이상 입력해야 합니다.");
+          return;
+        }
+        
+        // Trigger SignUp
+        elements.authSubmitBtn.disabled = true;
+        elements.authSubmitBtn.textContent = "회원가입 중...";
+        
+        try {
+          // 닉네임 중복 체크 (Supabase가 사용 가능한 경우)
+          if (supabaseClient) {
+            const { data: isTaken, error: checkError } = await supabaseClient.rpc('check_username_exists', {
+              username_to_check: username
+            });
+            
+            if (checkError) {
+              console.error("닉네임 중복 체크 실패:", checkError.message);
+            } else if (isTaken) {
+              elements.authUsernameGroup.classList.add("invalid");
+              elements.authUsernameError.textContent = "이미 사용 중인 닉네임입니다.";
+              elements.authUsernameError.style.display = "block";
+              alert("이미 사용 중인 닉네임입니다. 다른 닉네임을 입력해주세요.");
+              return;
+            }
+          }
+
+          const { data, error } = await supabaseClient.auth.signUp({
+            email,
+            password,
+            options: {
+              data: {
+                username: username
+              }
+            }
+          });
+          
+          if (error) {
+            console.error("회원가입 실패 상세 정보:", error);
+            let userMessage = "회원가입 실패: " + error.message;
+            
+            // Supabase Auth 트리거에서 unique 제약 조건 위반 시 발생하는 에러 메시지 매핑
+            if (error.message.includes("Database error saving user profile") || 
+                error.message.includes("profiles_username") || 
+                error.message.includes("unique constraint")) {
+              userMessage = "닉네임 중복으로 회원가입이 되지 않았습니다. 다른 닉네임을 입력해주세요.";
+              elements.authUsernameGroup.classList.add("invalid");
+              elements.authUsernameError.textContent = "이미 사용 중인 닉네임입니다.";
+              elements.authUsernameError.style.display = "block";
+            }
+            
+            alert(userMessage);
+          } else if (data.user) {
+            alert("회원가입 승인 메일이 전송되었습니다! 이메일 링크를 확인하시면 로그인이 승인됩니다.");
+            toggleAuthMode(); // Reset to login
+          }
+        } catch (signUpErr) {
+          console.error("회원가입 예외 발생:", signUpErr);
+          alert("회원가입 중 예상치 못한 오류가 발생했습니다: " + signUpErr.message);
+        } finally {
+          elements.authSubmitBtn.disabled = false;
+          elements.authSubmitBtn.textContent = "가입하기";
+        }
+      } else {
+        // Trigger Signin
+        if (!validateEmail(email)) {
+          document.getElementById("auth-email-group").classList.add("invalid");
+          elements.authEmailError.style.display = "block";
+          alert("올바른 이메일 형식을 입력해주세요 (예: user@example.com).");
+          return;
+        }
+        if (password.length < 6) {
+          document.getElementById("auth-password-group").classList.add("invalid");
+          elements.authPasswordError.style.display = "block";
+          alert("비밀번호는 최소 6자 이상 입력해야 합니다.");
+          return;
+        }
+        
+        elements.authSubmitBtn.disabled = true;
+        elements.authSubmitBtn.textContent = "로그인 중...";
+        
+        try {
+          const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
+          if (error) {
+            console.error("로그인 실패 상세 정보:", error);
+            alert("로그인 실패: " + error.message);
+          }
+        } catch (signInErr) {
+          console.error("로그인 예외 발생:", signInErr);
+          alert("로그인 중 예상치 못한 오류가 발생했습니다: " + signInErr.message);
+        } finally {
+          elements.authSubmitBtn.disabled = false;
+          elements.authSubmitBtn.textContent = "로그인하기";
+        }
+      }
+    }
+
+    function toggleAuthMode() {
+      state.isSignUpMode = !state.isSignUpMode;
+      clearInputErrors();
+      
+      if (state.isSignUpMode) {
+        elements.authTitle.textContent = "회원가입";
+        elements.authSubtitle.textContent = "계정을 생성하여 기록을 데이터베이스에 영구 보존하세요.";
+        elements.authUsernameGroup.style.display = "block";
+        elements.authUsernameInput.required = true;
+        elements.authSubmitBtn.textContent = "가입하기";
+        elements.authToggleText.textContent = "이미 계정이 있으신가요?";
+        elements.authToggleBtn.textContent = "로그인";
+      } else {
+        elements.authTitle.textContent = "로그인";
+        elements.authSubtitle.textContent = "퀴즈를 풀고 결과를 기록하려면 로그인이 필요합니다.";
+        elements.authUsernameGroup.style.display = "none";
+        elements.authUsernameInput.required = false;
+        elements.authSubmitBtn.textContent = "로그인하기";
+        elements.authToggleText.textContent = "계정이 없으신가요?";
+        elements.authToggleBtn.textContent = "회원가입";
+      }
+    }
+
+    async function handleLogout() {
+      if (supabaseClient) {
+        const { error } = await supabaseClient.auth.signOut();
+        if (error) console.error("로그아웃 오류:", error.message);
+      } else {
+        // Offline mode logout
+        state.username = "";
+        elements.authContainer.style.display = "block";
+        elements.startContainer.style.display = "none";
+        elements.authUsernameInput.value = "";
+      }
+    }
+
+    async function handleWithdraw() {
+      if (!supabaseClient || !state.session) return;
+      
+      const confirmDelete = confirm("정말로 회원 탈퇴를 진행하시겠습니까?\n탈퇴 시 회원 정보와 모든 퀴즈 기록이 영구 삭제되며 복구할 수 없습니다.");
+      if (!confirmDelete) return;
+      
+      elements.withdrawBtn.disabled = true;
+      elements.withdrawBtn.textContent = "탈퇴 중...";
+      
+      try {
+        const { error } = await supabaseClient.rpc('delete_user_account');
+        if (error) throw error;
+        
+        alert("회원 탈퇴가 완료되었습니다. 이용해 주셔서 감사합니다.");
+        await supabaseClient.auth.signOut();
+      } catch (err) {
+        console.error("회원 탈퇴 오류:", err);
+        alert("회원 탈퇴 처리 중 오류가 발생했습니다: " + err.message);
+        elements.withdrawBtn.disabled = false;
+        elements.withdrawBtn.textContent = "회원 탈퇴";
+      }
+    }
+
+    function validateEmail(email) {
+      const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      return re.test(email);
+    }
+
+    function clearInputErrors() {
+      elements.authUsernameGroup.classList.remove("invalid");
+      elements.authUsernameError.style.display = "none";
+      elements.authUsernameError.textContent = "닉네임은 2자 이상 15자 이하로 입력해주세요.";
+      document.getElementById("auth-email-group").classList.remove("invalid");
+      elements.authEmailError.style.display = "none";
+      document.getElementById("auth-password-group").classList.remove("invalid");
+      elements.authPasswordError.style.display = "none";
+    }
+
+    // 7. Theme Toggle Logic
+    function toggleTheme() {
+      const isDark = document.body.classList.contains("dark-theme");
+      if (isDark) {
+        document.body.classList.remove("dark-theme");
+        document.body.classList.add("light-theme");
+        try { localStorage.setItem("theme", "light"); } catch (e) {}
+      } else {
+        document.body.classList.add("dark-theme");
+        document.body.classList.remove("light-theme");
+        try { localStorage.setItem("theme", "dark"); } catch (e) {}
+      }
+    }
+
+    // 8. Navigation: Switch Screens
+    function switchScreen(targetScreen) {
+      const screens = [elements.welcomeScreen, elements.quizScreen, elements.resultScreen];
+      screens.forEach(screen => {
+        screen.classList.remove("active");
+      });
+      targetScreen.classList.add("active");
+    }
+
+    // 9. Start Quiz Action
+    function handleStartQuiz() {
+      switchScreen(elements.quizScreen);
+      loadQuestion(0);
+    }
+
+    // 10. Quiz Render & Timer Engine
+    function loadQuestion(index) {
+      state.currentQuestionIdx = index;
+      state.isAnswered = false;
+      state.timeLeft = TIMER_LIMIT;
+      
+      const currentQuestion = quizData[index];
+      
+      // Update Header progress
+      elements.currentQuestionIdxText.textContent = index + 1;
+      const progressPercent = ((index + 1) / quizData.length) * 100;
+      elements.progressBar.style.width = `${progressPercent}%`;
+      elements.currentScoreText.textContent = state.score;
+      
+      // Render Question Text
+      elements.questionText.textContent = currentQuestion.question;
+      
+      // Render Options
+      elements.optionsContainer.innerHTML = "";
+      currentQuestion.options.forEach((option, optIdx) => {
+        const optionBtn = document.createElement("button");
+        optionBtn.className = "option-btn";
+        optionBtn.innerHTML = `
+          <span class="option-marker">${String.fromCharCode(65 + optIdx)}</span>
+          <span class="option-text"></span>
+          <span class="option-status-icon"></span>
+        `;
+        optionBtn.querySelector(".option-text").textContent = option;
+        
+        optionBtn.addEventListener("click", () => handleSelectOption(optIdx, optionBtn));
+        
+        elements.optionsContainer.appendChild(optionBtn);
+      });
+      
+      elements.nextBtn.disabled = true;
+      
+      resetTimerProgressCircle();
+      startTimer();
+    }
+
+    function startTimer() {
+      clearInterval(state.timerInterval);
+      updateTimerUI();
+      
+      state.timerInterval = setInterval(() => {
+        state.timeLeft--;
+        updateTimerUI();
+        
+        if (state.timeLeft <= 0) {
+          clearInterval(state.timerInterval);
+          handleTimeout();
+        }
+      }, 1000);
+    }
+
+    function updateTimerUI() {
+      elements.timerText.textContent = state.timeLeft;
+      
+      const offset = CIRCUMFERENCE * (1 - state.timeLeft / TIMER_LIMIT);
+      elements.timerProgress.style.strokeDashoffset = offset;
+      
+      if (state.timeLeft > 7) {
+        elements.timerProgress.style.stroke = "#34d399";
+      } else if (state.timeLeft > 3) {
+        elements.timerProgress.style.stroke = "#fb923c";
+      } else {
+        elements.timerProgress.style.stroke = "#f87171";
+      }
+    }
+
+    function resetTimerProgressCircle() {
+      elements.timerProgress.style.strokeDashoffset = 0;
+      elements.timerProgress.style.stroke = "#34d399";
+    }
+
+    // 11. Interactive Answers Verification
+    function handleSelectOption(selectedIdx, selectedBtn) {
+      if (state.isAnswered) return;
+      state.isAnswered = true;
+      clearInterval(state.timerInterval);
+      
+      state.answers.push(selectedIdx);
+      
+      const currentQuestion = quizData[state.currentQuestionIdx];
+      const isCorrect = selectedIdx === currentQuestion.answer;
+      const optionButtons = elements.optionsContainer.querySelectorAll(".option-btn");
+      
+      if (isCorrect) {
+        selectedBtn.classList.add("correct");
+        selectedBtn.querySelector(".option-status-icon").innerHTML = `
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" width="20" height="20">
+            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+          </svg>
+        `;
+        
+        const baseScore = 100;
+        const bonusScore = state.timeLeft * 10;
+        state.score += baseScore + bonusScore;
+        elements.currentScoreText.textContent = state.score;
+      } else {
+        selectedBtn.classList.add("wrong");
+        selectedBtn.querySelector(".option-status-icon").innerHTML = `
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" width="20" height="20">
+            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+          </svg>
+        `;
+        
+        const correctBtn = optionButtons[currentQuestion.answer];
+        correctBtn.classList.add("correct");
+        correctBtn.querySelector(".option-status-icon").innerHTML = `
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" width="20" height="20">
+            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+          </svg>
+        `;
+      }
+      
+      optionButtons.forEach(btn => btn.disabled = true);
+      elements.nextBtn.disabled = false;
+    }
+
+    // 12. Handle Timeout
+    function handleTimeout() {
+      state.isAnswered = true;
+      state.answers.push(-1);
+      
+      const currentQuestion = quizData[state.currentQuestionIdx];
+      const optionButtons = elements.optionsContainer.querySelectorAll(".option-btn");
+      
+      const correctBtn = optionButtons[currentQuestion.answer];
+      correctBtn.classList.add("correct");
+      correctBtn.querySelector(".option-status-icon").innerHTML = `
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" width="20" height="20">
+          <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+        </svg>
+      `;
+      
+      optionButtons.forEach(btn => btn.disabled = true);
+      elements.timerText.textContent = "⏱️";
+      elements.nextBtn.disabled = false;
+    }
+
+    // 13. Screen flow navigation
+    function handleNextQuestion() {
+      const nextIdx = state.currentQuestionIdx + 1;
+      
+      if (nextIdx < quizData.length) {
+        loadQuestion(nextIdx);
+      } else {
+        showResults();
+      }
+    }
+
+    // 14. Show Results Screen & Trigger Database Upload
+    async function showResults() {
+      switchScreen(elements.resultScreen);
+      
+      let correctCount = 0;
+      state.answers.forEach((ans, idx) => {
+        if (ans === quizData[idx].answer) {
+          correctCount++;
+        }
+      });
+      
+      elements.resultGreeting.textContent = `${state.username} 도전자님의 최종 성적표입니다.`;
+      elements.finalScoreText.textContent = state.score.toLocaleString();
+      elements.correctRatioText.textContent = `${correctCount} / ${quizData.length}`;
+      
+      let rankTitle = "";
+      let rankDesc = "";
+      let badgeIcon = "";
+      
+      if (correctCount >= 9) {
+        rankTitle = "웹 마스터 (Web Master)";
+        rankDesc = "완벽합니다! 프론트엔드 및 브라우저 명세를 꿰뚫고 있는 진정한 전문가이시군요.";
+        badgeIcon = "👑";
+      } else if (correctCount >= 7) {
+        rankTitle = "시니어 아키텍트 (Senior Architect)";
+        rankDesc = "훌륭합니다! 프론트엔드 코어 지식에 대해 매우 단단한 기반을 가지고 계시네요.";
+        badgeIcon = "🏆";
+      } else if (correctCount >= 4) {
+        rankTitle = "주니어 개발자 (Junior Developer)";
+        rankDesc = "좋은 시도였습니다! 지식 보강을 통해 더욱 훌륭한 엔지니어로 거듭날 수 있습니다.";
+        badgeIcon = "💻";
+      } else {
+        rankTitle = "코딩 입문자 (Beginner Coder)";
+        rankDesc = "괜찮습니다! 배움에는 끝이 없습니다. 오답 노트를 꼼꼼히 확인하고 다시 한번 도전해 보세요.";
+        badgeIcon = "🌱";
+      }
+      
+      elements.rankTitleText.textContent = rankTitle;
+      elements.rankDescText.textContent = rankDesc;
+      elements.rankBadgeBox = document.querySelector(".rank-badge-box");
+      elements.rankBadgeBox.querySelector(".badge-icon").textContent = badgeIcon;
+      
+      renderReviewList();
+
+      if (supabaseClient && state.session) {
+        await saveQuizResult(state.score, correctCount);
+      }
+    }
+
+    async function saveQuizResult(score, correctCount) {
+      try {
+        const { error } = await supabaseClient
+          .from('quiz_results')
+          .insert([
+            {
+              user_id: state.session.user.id,
+              score: score,
+              correct_ratio: `${correctCount} / ${quizData.length}`,
+              answers: state.answers
+            }
+          ]);
+        
+        if (error) throw error;
+        console.log("퀴즈 결과가 Supabase Database에 성공적으로 저장되었습니다!");
+
+        // 실시간 DB 데이터 검증 조회 실행
+        const { data: dbRows, error: selectError } = await supabaseClient
+          .from('quiz_results')
+          .select('*')
+          .eq('user_id', state.session.user.id);
+        
+        if (selectError) {
+          console.warn("DB 데이터 검증 조회 실패:", selectError.message);
+        } else {
+          console.log("현재 DB에 누적 저장되어 있는 사용자 퀴즈 기록:", dbRows);
+        }
+      } catch (err) {
+        console.error("퀴즈 결과 DB 업로드 실패:", err.message);
+      }
+    }
+
+    // Render dynamic collapsible explanations
+    function renderReviewList() {
+      elements.reviewList.innerHTML = "";
+      
+      quizData.forEach((q, idx) => {
+        const userAnswerIdx = state.answers[idx];
+        const isCorrect = userAnswerIdx === q.answer;
+        
+        let statusText = "오답";
+        if (isCorrect) statusText = "정답";
+        else if (userAnswerIdx === -1) statusText = "시간 초과";
+        
+        const userSelectedText = userAnswerIdx === -1 ? "선택하지 않음" : q.options[userAnswerIdx];
+        const correctText = q.options[q.answer];
+        
+        const item = document.createElement("div");
+        item.className = "review-item";
+        
+        item.innerHTML = `
+          <div class="review-header">
+            <div class="review-header-title">
+              <span class="review-status-badge ${isCorrect ? 'correct' : 'wrong'}">${statusText}</span>
+              <span>Q${idx + 1}. ${q.question.substring(0, 30)}...</span>
+            </div>
+            <div class="review-toggle-icon">▼</div>
+          </div>
+          <div class="review-body">
+            <p><strong>질문:</strong> ${q.question}</p>
+            <p><strong>본인의 선택:</strong> <span style="color: ${isCorrect ? 'var(--success)' : 'var(--error)'}">${userSelectedText}</span></p>
+            <p><strong>정답:</strong> <span style="color: var(--success)">${correctText}</span></p>
+            <div class="explanation-box">
+              <strong>해설:</strong> ${q.explanation}
+            </div>
+          </div>
+        `;
+        
+        item.querySelector(".review-header").addEventListener("click", () => {
+          item.classList.toggle("expanded");
+        });
+        
+        elements.reviewList.appendChild(item);
+      });
+    }
+
+    // 15. Restart Logic (Returns to Lobby startContainer while keeping login session)
+    function resetQuiz() {
+      state.currentQuestionIdx = 0;
+      state.score = 0;
+      state.answers = [];
+      state.timeLeft = TIMER_LIMIT;
+      clearInterval(state.timerInterval);
+      state.timerInterval = null;
+      state.isAnswered = false;
+      
+      switchScreen(elements.welcomeScreen);
+    }
+
+    document.addEventListener("DOMContentLoaded", init);
+  </script>
+</body>
+</html>

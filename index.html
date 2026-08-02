@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <!-- Favicon -->
+  <link rel="icon" href="data:,">
+  
+  <!-- SEO Meta Tags -->
+  <title>프론트엔드 개발자 상식 퀴즈 (One Quiz)</title>
+  <meta name="description" content="자신의 웹 개발 및 프론트엔드 지식을 세련된 네온 테마의 퀴즈로 테스트해보세요. 바닐라 자바스크립트로 구현된 반응형 퀴즈 웹사이트입니다.">
+  <meta name="keywords" content="웹 개발, 프론트엔드, 자바스크립트 퀴즈, CSS 퀴즈, 바닐라 JS, HTML5, CSS3">
+  
+  <!-- Open Graph -->
+  <meta property="og:title" content="프론트엔드 개발자 상식 퀴즈">
+  <meta property="og:description" content="네온 Cyberpunk 스타일의 웹 개발 퀴즈로 실력을 테스트해보세요!">
+  <meta property="og:type" content="website">
+  
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
+  
+  <!-- Custom Stylesheet -->
+  <link rel="stylesheet" href="style.css">
+  
+  <!-- Supabase JS Client SDK -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body class="dark-theme">
+  <!-- Background Glow Effects -->
+  <div class="glow-sphere glow-1" aria-hidden="true"></div>
+  <div class="glow-sphere glow-2" aria-hidden="true"></div>
+
+  <div class="app-container">
+    <!-- Header: App title & Theme toggle -->
+    <header class="app-header">
+      <div class="header-content">
+        <h1 class="logo">One <span class="logo-accent">Quiz</span></h1>
+        <button id="theme-toggle-btn" class="icon-btn" aria-label="테마 전환">
+          <!-- Light theme icon (sun) -->
+          <svg class="sun-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707m0-12.728l.707.707m12.728 12.728l.707.707M12 8a4 4 0 100 8 4 4 0 000-8z" />
+          </svg>
+          <!-- Dark theme icon (moon) -->
+          <svg class="moon-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="main-content">
+      
+      <!-- Screen 1: Welcome & Auth Screen -->
+      <section id="welcome-screen" class="screen-card active">
+        
+        <!-- 1.1 Auth Container (Shown when logged out) -->
+        <div id="auth-container" class="auth-container">
+          <div class="welcome-header">
+            <div class="badge">SIGN IN / SIGN UP</div>
+            <h2 id="auth-title">로그인</h2>
+            <p id="auth-subtitle">퀴즈를 풀고 결과를 기록하려면 로그인이 필요합니다.</p>
+          </div>
+
+          <form id="auth-form" class="welcome-form" novalidate>
+            <!-- Username: 가입 모드에서만 동적으로 보임 -->
+            <div class="input-group" id="auth-username-group" style="display: none;">
+              <label for="auth-username">닉네임</label>
+              <div class="input-wrapper">
+                <input type="text" id="auth-username" placeholder="사용할 닉네임을 입력하세요">
+                <span class="focus-border"></span>
+              </div>
+              <p id="auth-username-error" class="error-message" role="alert">닉네임은 2자 이상 15자 이하로 입력해주세요.</p>
+            </div>
+
+            <!-- Email -->
+            <div class="input-group" id="auth-email-group">
+              <label for="auth-email">이메일</label>
+              <div class="input-wrapper">
+                <input type="email" id="auth-email" placeholder="이메일 주소를 입력하세요" required>
+                <span class="focus-border"></span>
+              </div>
+              <p id="auth-email-error" class="error-message" role="alert">올바른 이메일 주소를 입력해주세요.</p>
+            </div>
+
+            <!-- Password -->
+            <div class="input-group" id="auth-password-group">
+              <label for="auth-password">비밀번호</label>
+              <div class="input-wrapper">
+                <input type="password" id="auth-password" placeholder="비밀번호를 입력하세요 (6자 이상)" required minlength="6">
+                <span class="focus-border"></span>
+              </div>
+              <p id="auth-password-error" class="error-message" role="alert">비밀번호는 6자 이상이어야 합니다.</p>
+            </div>
+
+            <button type="submit" id="auth-submit-btn" class="btn btn-primary">로그인하기</button>
+            
+            <div class="auth-toggle-box">
+              <span id="auth-toggle-text">계정이 없으신가요?</span>
+              <button type="button" id="auth-toggle-btn" class="link-btn">회원가입</button>
+            </div>
+          </form>
+        </div>
+
+        <!-- 1.2 Start Container (Shown when logged in) -->
+        <div id="start-container" class="start-container" style="display: none;">
+          <div class="welcome-header">
+            <div class="badge">WELCOME BACK</div>
+            <h2>환영합니다, <span id="user-nickname" class="logo-accent">도전자</span>님!</h2>
+            <p>HTML, CSS, JavaScript 및 브라우저 아키텍처에 대한 흥미로운 10개의 퀴즈가 기다리고 있습니다.</p>
+          </div>
+
+          <div class="rules-box">
+            <h3>퀴즈 규칙</h3>
+            <ul>
+              <li>총 문항은 <strong>10문항</strong>입니다.</li>
+              <li>각 문항당 시간 제한은 <strong>15초</strong>입니다.</li>
+              <li>시간이 초과되면 해당 문항은 오답 처리되며 다음 단계로 이동합니다.</li>
+              <li>문항 정답을 맞추면 남은 시간에 비례하여 추가 보너스 점수를 얻습니다!</li>
+              <li>퀴즈를 마치면 점수 기록이 Supabase DB에 자동 저장됩니다.</li>
+            </ul>
+          </div>
+
+          <div class="start-actions">
+            <button type="button" id="start-btn" class="btn btn-primary">퀴즈 시작하기</button>
+            <button type="button" id="logout-btn" class="btn btn-secondary">로그아웃</button>
+            <button type="button" id="withdraw-btn" class="btn btn-danger" style="display: none;">회원 탈퇴</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Screen 2: Quiz Screen -->
+      <section id="quiz-screen" class="screen-card">
+        <!-- Progress and Timer header -->
+        <div class="quiz-status-bar">
+          <div class="progress-info">
+            <span class="question-number">Question <strong id="current-question-idx">1</strong> of <strong id="total-questions-cnt">10</strong></span>
+            <span class="score-display">Score: <strong id="current-score">0</strong></span>
+          </div>
+          <div class="progress-bar-container">
+            <div id="progress-bar" class="progress-bar" style="width: 10%;"></div>
+          </div>
+          
+          <!-- Timer widget -->
+          <div class="timer-widget">
+            <div class="timer-ring-container">
+              <svg class="timer-ring" width="60" height="60">
+                <circle class="timer-ring__circle-bg" stroke="rgba(255, 255, 255, 0.1)" stroke-width="4" fill="transparent" r="26" cx="30" cy="30" />
+                <circle id="timer-progress" class="timer-ring__circle" stroke="#818cf8" stroke-width="4" fill="transparent" r="26" cx="30" cy="30" stroke-dasharray="163.36" stroke-dashoffset="0" />
+              </svg>
+              <div id="timer-text" class="timer-text">15</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Question Area -->
+        <div class="question-container">
+          <h2 id="question-text" class="question-text">질문 텍스트가 로드 중입니다...</h2>
+        </div>
+
+        <!-- Multiple Choice Options -->
+        <div id="options-container" class="options-container">
+          <!-- Dynamically generated option buttons will go here -->
+        </div>
+
+        <!-- Quiz Footer Actions -->
+        <div class="quiz-footer">
+          <button id="next-btn" class="btn btn-primary btn-icon-right" disabled>
+            <span>다음 문제</span>
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" width="18" height="18">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
+        </div>
+      </section>
+
+      <!-- Screen 3: Result Screen -->
+      <section id="result-screen" class="screen-card">
+        <div class="result-header">
+          <div class="confetti-effect">🎉</div>
+          <h2>퀴즈 완료!</h2>
+          <p id="result-greeting">도전자님의 성적표입니다.</p>
+        </div>
+
+        <!-- Score Board -->
+        <div class="score-board-card">
+          <div class="score-metric">
+            <span class="metric-label">최종 점수</span>
+            <span id="final-score" class="metric-value">0</span>
+          </div>
+          <div class="score-divider"></div>
+          <div class="score-metric">
+            <span class="metric-label">정답률</span>
+            <span id="correct-ratio" class="metric-value">0/10</span>
+          </div>
+        </div>
+
+        <!-- Performance Review / Badge -->
+        <div class="rank-badge-box">
+          <span class="badge-icon">🏆</span>
+          <div>
+            <h3 id="rank-title">웹 마스터 (Web Master)</h3>
+            <p id="rank-desc">엄청난 지식의 소유자이시군요! 완벽에 가까운 결과입니다.</p>
+          </div>
+        </div>
+
+        <!-- Question review / Explanations -->
+        <div class="review-section">
+          <h3>문항별 정답 및 해설</h3>
+          <div id="review-list" class="review-list">
+            <!-- Dynamically populated review items -->
+          </div>
+        </div>
+
+        <!-- Action buttons -->
+        <div class="result-actions">
+          <button id="retry-btn" class="btn btn-secondary">다시 도전하기</button>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="app-footer">
+      <p>&copy; 2026 One Quiz. Developed with pure Vanilla HTML/CSS/JS.</p>
+    </footer>
+  </div>
+
+  <!-- Custom Script -->
+  <script src="app.js"></script>
+</body>
+</html>
