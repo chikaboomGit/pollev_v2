@@ -73,7 +73,13 @@ let state = {
   answerTally: {}, // { optionIdx: count } — 현재 활성 문제의 실시간 답안 분포
   questionList: [], // 관리자 패널에 표시할 등록된 문제 목록 캐시
   answerCounts: {}, // { question_id: 참여자 수 } — 관리자 패널의 초기화 버튼에 표시
-  adminCountdownInterval: null // 관리자 패널의 활성 문제 남은시간 표시 + 자동 비활성화 타이머
+  adminCountdownInterval: null, // 관리자 패널의 활성 문제 남은시간 표시 + 자동 비활성화 타이머
+
+  // 참가자 대기 화면의 "마지막 문제 리뷰" 관련 상태
+  lastQuestionId: null, // 마지막으로 활성화됐던 문제 id (비활성화 이후에도 유지됨)
+  lastActivatedAt: null,
+  reviewDistributionChannel: null,
+  reviewTally: {} // { optionIdx: count } — 리뷰 카드에 표시할 실시간 선택 분포
 };
 
 // 3. DOM Elements Cache
@@ -154,6 +160,12 @@ const elements = {
 
   // 리더보드 (참가자 대기 화면)
   leaderboardList: document.getElementById("leaderboard-list"),
+
+  // 마지막 문제 리뷰 (참가자 대기 화면)
+  quizReviewEmpty: document.getElementById("quiz-review-empty"),
+  quizReviewContent: document.getElementById("quiz-review-content"),
+  quizReviewQuestionText: document.getElementById("quiz-review-question-text"),
+  quizReviewOptions: document.getElementById("quiz-review-options"),
 
   quizFooterMessage: document.getElementById("quiz-footer-message"),
 
@@ -291,8 +303,14 @@ function init() {
           supabaseClient.removeChannel(state.answerDistributionChannel);
           state.answerDistributionChannel = null;
         }
+        if (state.reviewDistributionChannel) {
+          supabaseClient.removeChannel(state.reviewDistributionChannel);
+          state.reviewDistributionChannel = null;
+        }
         clearInterval(state.adminCountdownInterval);
         state.adminCountdownInterval = null;
+        state.lastQuestionId = null;
+        state.lastActivatedAt = null;
 
         // 로그아웃 시 로그인 폼 상태를 '로그인 모드'로 리셋
         if (state.isSignUpMode) {
@@ -739,11 +757,13 @@ async function subscribeToQuizState() {
     // 최초 진입 시 현재 활성 문제 상태를 1회 조회
     const { data, error } = await supabaseClient
       .from('quiz_state')
-      .select('active_question_id, updated_at')
+      .select('active_question_id, updated_at, last_question_id, last_activated_at')
       .eq('id', 1)
       .single();
 
     if (!error && data) {
+      state.lastQuestionId = data.last_question_id;
+      state.lastActivatedAt = data.last_activated_at;
       await handleActiveQuestionChange(data.active_question_id, data.updated_at);
     }
 
@@ -751,7 +771,11 @@ async function subscribeToQuizState() {
       state.quizStateChannel = supabaseClient
         .channel('quiz_state_changes')
         .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'quiz_state' },
-          (payload) => handleActiveQuestionChange(payload.new.active_question_id, payload.new.updated_at))
+          (payload) => {
+            state.lastQuestionId = payload.new.last_question_id;
+            state.lastActivatedAt = payload.new.last_activated_at;
+            handleActiveQuestionChange(payload.new.active_question_id, payload.new.updated_at);
+          })
         .subscribe();
     }
   } finally {
@@ -782,6 +806,7 @@ async function handleActiveQuestionChange(questionId, activatedAt) {
     elements.waitingMessage.textContent = "관리자가 문제를 활성화하면 자동으로 화면이 전환됩니다. 잠시만 기다려주세요...";
     switchScreen(elements.welcomeScreen);
     await loadLeaderboard();
+    await loadQuizReview();
     return;
   }
 
@@ -789,6 +814,7 @@ async function handleActiveQuestionChange(questionId, activatedAt) {
   if (alreadyAnswered) {
     elements.waitingMessage.textContent = "이미 응답을 제출한 문제입니다. 다음 문제를 기다려주세요.";
     switchScreen(elements.welcomeScreen);
+    await loadQuizReview();
     return;
   }
 
@@ -1085,9 +1111,15 @@ async function resetQuestionAnswers(questionId) {
     // 지금 진행 중인 문제를 초기화한 경우, quiz_state를 다시 갱신해 모든 참가자에게
     // "새로 풀 수 있는 상태"로 재브로드캐스트합니다 (타이머도 새 시각 기준으로 재시작됨).
     if (questionId === state.activeQuestionId) {
+      const nowIso = new Date().toISOString();
       const { error: restateError } = await supabaseClient
         .from('quiz_state')
-        .update({ active_question_id: questionId, updated_at: new Date().toISOString() })
+        .update({
+          active_question_id: questionId,
+          updated_at: nowIso,
+          last_question_id: questionId,
+          last_activated_at: nowIso
+        })
         .eq('id', 1);
       if (restateError) throw restateError;
       await subscribeToAnswerDistribution(questionId);
@@ -1151,9 +1183,17 @@ async function activateQuestion(questionId) {
       if (finalizeError) console.error("채점 마감 실패:", finalizeError.message);
     }
 
+    const updatePayload = { active_question_id: questionId, updated_at: new Date().toISOString() };
+    if (questionId !== null && questionId !== undefined) {
+      // 비활성화 시에는 last_question_id/last_activated_at을 건드리지 않아,
+      // 대기 화면에서 "마지막 문제 리뷰"로 계속 참조할 수 있도록 합니다.
+      updatePayload.last_question_id = questionId;
+      updatePayload.last_activated_at = updatePayload.updated_at;
+    }
+
     const { error } = await supabaseClient
       .from('quiz_state')
-      .update({ active_question_id: questionId, updated_at: new Date().toISOString() })
+      .update(updatePayload)
       .eq('id', 1);
 
     if (error) throw error;
@@ -1285,6 +1325,96 @@ async function loadLeaderboard() {
     li.innerHTML = `<span class="leaderboard-rank">${idx + 1}</span><span class="leaderboard-name">${row.username || "도전자"}</span><span class="leaderboard-score">${row.total_score}점</span>`;
     elements.leaderboardList.appendChild(li);
   });
+}
+
+// 9.12 참가자 대기 화면: 마지막으로 활성화됐던 문제 + 선택지별 응답 수를 리뷰로 표시
+// 오늘 활성화된 적이 없으면 "최근 진행된 퀴즈가 없습니다"를 표시합니다.
+let isLoadingQuizReview = false;
+async function loadQuizReview() {
+  if (!supabaseClient || isLoadingQuizReview) return;
+  isLoadingQuizReview = true;
+
+  try {
+    if (state.reviewDistributionChannel) {
+      supabaseClient.removeChannel(state.reviewDistributionChannel);
+      state.reviewDistributionChannel = null;
+    }
+
+    const activatedToday = state.lastActivatedAt &&
+      new Date(state.lastActivatedAt).toDateString() === new Date().toDateString();
+
+    if (!state.lastQuestionId || !activatedToday) {
+      elements.quizReviewEmpty.style.display = "block";
+      elements.quizReviewContent.style.display = "none";
+      return;
+    }
+
+    const { data: questionRow, error } = await supabaseClient
+      .from('questions')
+      .select('*')
+      .eq('id', state.lastQuestionId)
+      .single();
+
+    if (error || !questionRow) {
+      elements.quizReviewEmpty.style.display = "block";
+      elements.quizReviewContent.style.display = "none";
+      return;
+    }
+
+    elements.quizReviewEmpty.style.display = "none";
+    elements.quizReviewContent.style.display = "block";
+    elements.quizReviewQuestionText.textContent = questionRow.question_text;
+
+    state.reviewTally = {};
+    const { data: answerRows, error: countError } = await supabaseClient
+      .from('quiz_answers')
+      .select('selected_option')
+      .eq('question_id', state.lastQuestionId);
+
+    if (!countError && answerRows) {
+      answerRows.forEach(row => {
+        state.reviewTally[row.selected_option] = (state.reviewTally[row.selected_option] || 0) + 1;
+      });
+    }
+
+    renderQuizReviewOptions(questionRow);
+
+    const reviewQuestionId = state.lastQuestionId;
+    state.reviewDistributionChannel = supabaseClient
+      .channel(`quiz_review_${reviewQuestionId}`)
+      .on('postgres_changes', {
+        event: 'INSERT', schema: 'public', table: 'quiz_answers', filter: `question_id=eq.${reviewQuestionId}`
+      }, (payload) => {
+        const opt = payload.new.selected_option;
+        state.reviewTally[opt] = (state.reviewTally[opt] || 0) + 1;
+        renderQuizReviewOptions(questionRow);
+      })
+      .subscribe();
+  } catch (err) {
+    console.error("퀴즈 리뷰 조회 실패:", err.message);
+  } finally {
+    isLoadingQuizReview = false;
+  }
+}
+
+// 리뷰 카드의 선택지별 응답 수/비율 렌더 (정답은 별도 표시)
+function renderQuizReviewOptions(questionRow) {
+  const totalCount = Object.values(state.reviewTally).reduce((a, b) => a + b, 0);
+
+  elements.quizReviewOptions.innerHTML = questionRow.options.map((optionText, idx) => {
+    const count = state.reviewTally[idx] || 0;
+    const percent = totalCount > 0 ? Math.round((count / totalCount) * 100) : 0;
+    const isCorrect = idx === questionRow.correct_option;
+    return `
+      <div class="distribution-row${isCorrect ? ' distribution-row-correct' : ''}">
+        <span class="distribution-label">${String.fromCharCode(65 + idx)}. ${optionText}${isCorrect ? ' ✓ 정답' : ''}</span>
+        <div class="distribution-bar-track">
+          <div class="distribution-bar-fill" style="width: ${percent}%;"></div>
+        </div>
+        <span class="distribution-count">${count}명</span>
+      </div>
+    `;
+  }).join("");
 }
 
 // 10. Quiz Render & Timer Engine
@@ -1482,6 +1612,7 @@ function finishAnswering(questionId, selectedOption, isCorrect) {
       elements.waitingMessage.textContent = "응답을 제출했습니다. 관리자가 다음 문제를 활성화하면 자동으로 화면이 전환됩니다.";
       switchScreen(elements.welcomeScreen);
       await loadLeaderboard();
+      await loadQuizReview();
     }, 1800);
   } else {
     // 오프라인 모드: 기존 순차 진행 방식 유지

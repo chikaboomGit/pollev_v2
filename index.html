@@ -174,6 +174,16 @@
           <div id="waiting-panel" class="rules-box" style="display: none;">
             <h3>대기 중</h3>
             <p id="waiting-message">관리자가 문제를 활성화하면 자동으로 화면이 전환됩니다. 잠시만 기다려주세요...</p>
+
+            <div class="quiz-review-box">
+              <h4>📋 최근 문제 리뷰</h4>
+              <p id="quiz-review-empty" class="quiz-review-empty">최근 진행된 퀴즈가 없습니다.</p>
+              <div id="quiz-review-content" style="display: none;">
+                <p id="quiz-review-question-text" class="quiz-review-question-text"></p>
+                <div id="quiz-review-options" class="answer-distribution"></div>
+              </div>
+            </div>
+
             <div class="leaderboard-box">
               <h4>🏆 리더보드 (누적 점수)</h4>
               <ol id="leaderboard-list" class="leaderboard-list"></ol>

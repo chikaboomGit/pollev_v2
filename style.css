@@ -949,6 +949,33 @@ body.light-theme .option-marker {
   color: var(--text-secondary, #94a3b8);
 }
 
+.distribution-row-correct .distribution-label {
+  color: #34d399;
+  font-weight: 600;
+}
+
+.distribution-row-correct .distribution-bar-fill {
+  background: #34d399;
+}
+
+/* 마지막 문제 리뷰 (참가자 대기 화면) */
+.quiz-review-box {
+  margin-top: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  text-align: left;
+}
+
+.quiz-review-empty {
+  color: var(--text-secondary, #94a3b8);
+  font-size: 0.9rem;
+}
+
+.quiz-review-question-text {
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+
 /* 리더보드 */
 .leaderboard-box {
   margin-top: 16px;

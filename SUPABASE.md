@@ -171,6 +171,10 @@ create table public.quiz_state (
   id integer primary key default 1,
   active_question_id bigint references public.questions(id),
   updated_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  -- 문제가 비활성화된 뒤에도 참가자 대기 화면에서 "마지막 문제 리뷰"를 보여주기 위해
+  -- 비활성화 시에는 지우지 않고 활성화할 때마다만 갱신되는 필드
+  last_question_id bigint references public.questions(id),
+  last_activated_at timestamp with time zone,
   constraint single_row check (id = 1)
 );
 insert into public.quiz_state (id, active_question_id) values (1, null);
@@ -297,6 +301,11 @@ from public.quiz_answers qa
 join public.profiles p on p.id = qa.user_id
 group by qa.user_id, p.username
 order by total_score desc;
+
+-- 19. [마이그레이션] 참가자 대기 화면의 "마지막 문제 리뷰" 기능을 위한 컬럼 추가
+-- (이미 quiz_state 테이블이 있는 경우에만 실행하면 됩니다. 새로 테이블을 만드는 경우 위 9번에 이미 포함되어 있습니다.)
+alter table public.quiz_state add column if not exists last_question_id bigint references public.questions(id);
+alter table public.quiz_state add column if not exists last_activated_at timestamp with time zone;
 ```
 
 **Realtime 활성화**: Supabase 대시보드에서 `Database` → `Replication`으로 이동해 `quiz_state`와 `quiz_answers` 테이블의 Realtime 토글을 모두 켜주세요 (답안 분포 실시간 표시는 `quiz_answers` INSERT 이벤트 구독이 필요합니다). 또는 SQL Editor에서:
