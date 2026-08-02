@@ -740,7 +740,158 @@ body.light-theme .option-marker {
 /* Footer layout inside screen */
 .quiz-footer {
   display: flex;
-  justify-content: flex-end;
+  justify-content: center;
+}
+
+.quiz-footer-message {
+  color: var(--text-secondary, #94a3b8);
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+/* Admin question activation panel */
+.admin-question-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 16px 0;
+}
+
+.admin-question-btn {
+  text-align: left;
+  white-space: normal;
+}
+
+.admin-question-btn.active-question {
+  border-color: #34d399;
+  color: #34d399;
+}
+
+/* 문제 등록 폼 (관리자) */
+.question-form {
+  margin-bottom: 20px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.question-type-toggle {
+  display: flex;
+  gap: 16px;
+  margin-top: 6px;
+}
+
+.question-type-toggle label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 400;
+  cursor: pointer;
+}
+
+.question-options-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.question-option-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.question-option-input {
+  flex: 1;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-primary, #f1f5f9);
+}
+
+/* 실시간 답안 분포 */
+.answer-distribution {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 16px 0;
+}
+
+.distribution-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.85rem;
+}
+
+.distribution-label {
+  flex: 0 0 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.distribution-bar-track {
+  flex: 1;
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+
+.distribution-bar-fill {
+  height: 100%;
+  background: #818cf8;
+  transition: width 0.3s ease;
+}
+
+.distribution-count {
+  flex: 0 0 auto;
+  color: var(--text-secondary, #94a3b8);
+}
+
+/* 리더보드 */
+.leaderboard-box {
+  margin-top: 16px;
+  text-align: left;
+}
+
+.leaderboard-list {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.leaderboard-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.leaderboard-item.is-me {
+  border: 1px solid #818cf8;
+  background: rgba(129, 140, 248, 0.15);
+}
+
+.leaderboard-rank {
+  font-weight: 700;
+  width: 24px;
+}
+
+.leaderboard-name {
+  flex: 1;
+}
+
+.leaderboard-score {
+  font-weight: 600;
+  color: #34d399;
 }
 
 .btn-icon-right span {

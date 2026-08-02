@@ -102,6 +102,58 @@
               <span id="auth-toggle-text">계정이 없으신가요?</span>
               <button type="button" id="auth-toggle-btn" class="link-btn">회원가입</button>
             </div>
+            <div class="auth-toggle-box" id="forgot-password-box">
+              <button type="button" id="forgot-password-btn" class="link-btn">비밀번호를 잊으셨나요?</button>
+            </div>
+          </form>
+        </div>
+
+        <!-- 1.1b Forgot Password Container -->
+        <div id="forgot-password-container" class="auth-container" style="display: none;">
+          <div class="welcome-header">
+            <div class="badge">PASSWORD RESET</div>
+            <h2>비밀번호 재설정</h2>
+            <p>가입하신 이메일 주소를 입력하시면 재설정 링크를 보내드립니다.</p>
+          </div>
+
+          <form id="forgot-password-form" class="welcome-form" novalidate>
+            <div class="input-group" id="forgot-email-group">
+              <label for="forgot-email">이메일</label>
+              <div class="input-wrapper">
+                <input type="email" id="forgot-email" placeholder="이메일 주소를 입력하세요" required>
+                <span class="focus-border"></span>
+              </div>
+              <p id="forgot-email-error" class="error-message" role="alert">올바른 이메일 주소를 입력해주세요.</p>
+            </div>
+            <p id="forgot-info-message" class="error-message" role="status" style="display: none; color: var(--success, #22c55e);"></p>
+
+            <button type="submit" id="forgot-submit-btn" class="btn btn-primary">재설정 링크 보내기</button>
+
+            <div class="auth-toggle-box">
+              <button type="button" id="forgot-back-btn" class="link-btn">로그인으로 돌아가기</button>
+            </div>
+          </form>
+        </div>
+
+        <!-- 1.1c Recovery Container (Set New Password, shown after clicking email reset link) -->
+        <div id="recovery-container" class="auth-container" style="display: none;">
+          <div class="welcome-header">
+            <div class="badge">SET NEW PASSWORD</div>
+            <h2>새 비밀번호 설정</h2>
+            <p>새로 사용할 비밀번호를 입력해주세요.</p>
+          </div>
+
+          <form id="recovery-form" class="welcome-form" novalidate>
+            <div class="input-group" id="recovery-password-group">
+              <label for="recovery-password">새 비밀번호</label>
+              <div class="input-wrapper">
+                <input type="password" id="recovery-password" placeholder="새 비밀번호를 입력하세요 (6자 이상)" required minlength="6">
+                <span class="focus-border"></span>
+              </div>
+              <p id="recovery-password-error" class="error-message" role="alert">비밀번호는 6자 이상이어야 합니다.</p>
+            </div>
+
+            <button type="submit" id="recovery-submit-btn" class="btn btn-primary">비밀번호 변경하기</button>
           </form>
         </div>
 
@@ -110,22 +162,63 @@
           <div class="welcome-header">
             <div class="badge">WELCOME BACK</div>
             <h2>환영합니다, <span id="user-nickname" class="logo-accent">도전자</span>님!</h2>
-            <p>HTML, CSS, JavaScript 및 브라우저 아키텍처에 대한 흥미로운 10개의 퀴즈가 기다리고 있습니다.</p>
+            <p>HTML, CSS, JavaScript 및 브라우저 아키텍처에 대한 흥미로운 퀴즈가 진행됩니다.</p>
           </div>
 
-          <div class="rules-box">
-            <h3>퀴즈 규칙</h3>
-            <ul>
-              <li>총 문항은 <strong>10문항</strong>입니다.</li>
-              <li>각 문항당 시간 제한은 <strong>15초</strong>입니다.</li>
-              <li>시간이 초과되면 해당 문항은 오답 처리되며 다음 단계로 이동합니다.</li>
-              <li>문항 정답을 맞추면 남은 시간에 비례하여 추가 보너스 점수를 얻습니다!</li>
-              <li>퀴즈를 마치면 점수 기록이 Supabase DB에 자동 저장됩니다.</li>
-            </ul>
+          <!-- 1.2a 참가자용 대기 패널 -->
+          <div id="waiting-panel" class="rules-box" style="display: none;">
+            <h3>대기 중</h3>
+            <p id="waiting-message">관리자가 문제를 활성화하면 자동으로 화면이 전환됩니다. 잠시만 기다려주세요...</p>
+            <div class="leaderboard-box">
+              <h4>🏆 리더보드 (누적 점수)</h4>
+              <ol id="leaderboard-list" class="leaderboard-list"></ol>
+            </div>
+          </div>
+
+          <!-- 1.2b 관리자용 문제 관리 패널 -->
+          <div id="admin-panel" class="rules-box" style="display: none;">
+            <h3>관리자 패널</h3>
+
+            <!-- 문제 등록 폼 -->
+            <form id="question-form" class="question-form">
+              <h4>새 문제 등록</h4>
+              <div class="input-group">
+                <label>문제 유형</label>
+                <div class="question-type-toggle">
+                  <label><input type="radio" name="question-type" value="OX" checked> OX 퀴즈</label>
+                  <label><input type="radio" name="question-type" value="MULTIPLE"> 4지선다</label>
+                </div>
+              </div>
+              <div class="input-group">
+                <label for="question-text-input">문제 내용</label>
+                <div class="input-wrapper">
+                  <input type="text" id="question-text-input" placeholder="문제를 입력하세요" required>
+                  <span class="focus-border"></span>
+                </div>
+              </div>
+              <div id="question-options-fields" class="question-options-fields">
+                <!-- 문제 유형에 따라 동적으로 보기/정답 라디오가 생성됩니다 -->
+              </div>
+              <div class="input-group">
+                <label for="question-points-input">배점</label>
+                <div class="input-wrapper">
+                  <input type="number" id="question-points-input" min="1" value="100" required>
+                  <span class="focus-border"></span>
+                </div>
+              </div>
+              <button type="submit" id="question-submit-btn" class="btn btn-primary">문제 등록하기</button>
+            </form>
+
+            <!-- 등록된 문제 목록 -->
+            <h4>등록된 문제 목록</h4>
+            <div id="admin-question-list" class="admin-question-list"></div>
+            <button type="button" id="admin-deactivate-btn" class="btn btn-secondary">비활성화 (대기 상태로 전환)</button>
+
+            <!-- 실시간 답안 분포 (관리자) -->
+            <div id="admin-answer-distribution" class="answer-distribution" style="display: none;"></div>
           </div>
 
           <div class="start-actions">
-            <button type="button" id="start-btn" class="btn btn-primary">퀴즈 시작하기</button>
             <button type="button" id="logout-btn" class="btn btn-secondary">로그아웃</button>
             <button type="button" id="withdraw-btn" class="btn btn-danger" style="display: none;">회원 탈퇴</button>
           </div>
@@ -137,13 +230,10 @@
         <!-- Progress and Timer header -->
         <div class="quiz-status-bar">
           <div class="progress-info">
-            <span class="question-number">Question <strong id="current-question-idx">1</strong> of <strong id="total-questions-cnt">10</strong></span>
-            <span class="score-display">Score: <strong id="current-score">0</strong></span>
+            <span class="question-number">배점 <strong id="question-points-badge">0</strong>점</span>
+            <span class="score-display">누적 점수: <strong id="current-score">0</strong></span>
           </div>
-          <div class="progress-bar-container">
-            <div id="progress-bar" class="progress-bar" style="width: 10%;"></div>
-          </div>
-          
+
           <!-- Timer widget -->
           <div class="timer-widget">
             <div class="timer-ring-container">
@@ -166,14 +256,12 @@
           <!-- Dynamically generated option buttons will go here -->
         </div>
 
-        <!-- Quiz Footer Actions -->
+        <!-- 실시간 답안 분포 (참가자) -->
+        <div id="answer-distribution" class="answer-distribution"></div>
+
+        <!-- Quiz Footer: 응답 후 관리자의 다음 문제 활성화를 기다리는 안내 -->
         <div class="quiz-footer">
-          <button id="next-btn" class="btn btn-primary btn-icon-right" disabled>
-            <span>다음 문제</span>
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" width="18" height="18">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
-            </svg>
-          </button>
+          <p id="quiz-footer-message" class="quiz-footer-message"></p>
         </div>
       </section>
 
