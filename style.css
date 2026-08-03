@@ -96,6 +96,11 @@ body.light-theme {
   padding: 0;
 }
 
+html {
+  overflow-x: hidden;
+  width: 100%;
+}
+
 body {
   font-family: var(--font-body);
   color: var(--text-main);
@@ -974,6 +979,7 @@ body.light-theme .option-marker {
 .quiz-review-question-text {
   font-weight: 600;
   margin-bottom: 10px;
+  overflow-wrap: break-word;
 }
 
 /* 리더보드 */
@@ -1012,6 +1018,8 @@ body.light-theme .option-marker {
 
 .leaderboard-name {
   flex: 1;
+  min-width: 0;
+  overflow-wrap: break-word;
 }
 
 .leaderboard-score {
