@@ -67,10 +67,9 @@
 ## 4. 파일 구조
 ```
 pollev/
-├── index.html          # 웹사이트 뼈대 및 SEO 메타태그 (분리 버전)
+├── index.html          # 웹사이트 뼈대 및 SEO 메타태그
 ├── style.css           # 디자인 시스템, 테마 및 애니메이션
 ├── app.js              # 상태 제어, 타이머 및 퀴즈 로직 (바닐라 JS)
-├── index_single.html   # 모든 스타일과 스크립트를 내장한 단일 실행 버전 (로컬 서버 불필요)
 ├── PLAN.md             # 설계 계획서 (본 문서)
 ├── WORKFLOW.md         # 개발 과정 및 검증 보고서 (완료 후 작성 예정)
 └── SUPABASE.md         # Supabase 백엔드 마이그레이션 가이드 문서

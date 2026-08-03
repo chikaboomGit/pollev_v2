@@ -11,7 +11,6 @@
   - [index.html](file:///home/user/work/kosa-ict-genai-2026-1st/src/exercise/chikaboomGit/day34/pollev/index.html): 구조 설계 및 SEO 최적화 메타데이터 적용
   - [style.css](file:///home/user/work/kosa-ict-genai-2026-1st/src/exercise/chikaboomGit/day34/pollev/style.css): 레이아웃, 다크/라이트 테마 변수, 글래스모피즘 및 애니메이션
   - [app.js](file:///home/user/work/kosa-ict-genai-2026-1st/src/exercise/chikaboomGit/day34/pollev/app.js): 퀴즈 상태 머신, 실시간 SVG 타이머 렌더링, 퀴즈 10문항 제어
-  - [index_single.html](file:///home/user/work/kosa-ict-genai-2026-1st/src/exercise/chikaboomGit/day34/pollev/index_single.html): CSS와 JS를 포함하여 서버나 Node.js 없이 파일 더블 클릭만으로 단독 실행이 가능한 무설치 통합 HTML 버전
   - [PLAN.md](file:///home/user/work/kosa-ict-genai-2026-1st/src/exercise/chikaboomGit/day34/pollev/PLAN.md): 설계 계획서
   - [SUPABASE.md](file:///home/user/work/kosa-ict-genai-2026-1st/src/exercise/chikaboomGit/day34/pollev/SUPABASE.md): Supabase 이메일 인증 및 퀴즈 결과 적재 백엔드 이관 가이드
 
@@ -65,21 +64,15 @@
 
 ## 4. 로컬 구동 및 사용 방법
 
-Node.js나 로컬 웹 서버 없이 브라우저 단독으로 즉시 실행하고 싶거나, 혹은 로컬 웹 서버를 구축해 실행하고 싶은 경우에 맞춰 아래의 실행 방법을 선택할 수 있습니다.
+파일 분리형 구조(`index.html`, `style.css`, `app.js`)를 로컬 웹 서버로 구동합니다.
 
-### 방법 A. 파일 더블 클릭으로 무설치 단독 실행 (추천 - Node.js 불필요)
-- [index_single.html](file:///home/user/work/kosa-ict-genai-2026-1st/src/exercise/chikaboomGit/day34/pollev/index_single.html) 파일을 파일 탐색기에서 마우스 더블 클릭으로 직접 실행합니다.
-- HTML 파일 내에 스타일(CSS)과 스크립트(JS)가 완전히 내장되어 있어 네트워크 연결이나 별도 서버 소프트웨어 설치 없이 오프라인에서도 즉시 작동합니다.
-
-### 방법 B. Python 내장 서버 구동 (분리형 버전)
-- 파일 분리형 구조(`index.html`, `style.css`, `app.js`)를 로컬 서버 상에서 구동하려면 다음 명령을 사용합니다:
-- 터미널에서 다음 명령을 실행합니다:
+### 방법 A. Python 내장 서버 구동
 ```bash
 python3 -m http.server 8000
 ```
 서버가 실행되면 브라우저를 열고 `http://localhost:8000` 주소로 접속합니다.
 
-### 방법 C. Node.js `http-server` 패키지 구동
+### 방법 B. Node.js `http-server` 패키지 구동
 ```bash
 npx http-server -p 8000
 ```
