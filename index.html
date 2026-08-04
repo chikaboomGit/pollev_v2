@@ -227,7 +227,7 @@
                 <div class="input-group">
                   <label for="question-points-input">배점</label>
                   <div class="input-wrapper">
-                    <input type="number" id="question-points-input" min="1" value="100" required>
+                    <input type="number" id="question-points-input" min="0" value="100" required>
                     <span class="focus-border"></span>
                   </div>
                 </div>
@@ -242,6 +242,7 @@
               <div class="question-form-actions">
                 <button type="submit" id="question-submit-btn" class="btn btn-primary">문제 등록하기</button>
                 <button type="button" id="question-cancel-edit-btn" class="btn btn-secondary" style="display: none;">취소</button>
+                <button type="button" id="question-delete-btn" class="btn btn-danger" style="display: none;">이 문제 삭제</button>
               </div>
             </form>
 

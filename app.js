@@ -17,7 +17,7 @@ const OFFLINE_DEMO_QUESTIONS = [
     question_type: "MULTIPLE",
     question_text: "JavaScript에서 'typeof null'의 결과는 무엇인가요?",
     options: ["\"null\"", "\"undefined\"", "\"object\"", "\"function\""],
-    correct_option: 2,
+    correct_options: [2],
     points: 100,
     time_limit: 15,
     explanation: "JavaScript의 오래된 역사적 버그로 인해 `typeof null`은 `'object'`를 반환합니다."
@@ -27,7 +27,7 @@ const OFFLINE_DEMO_QUESTIONS = [
     question_type: "OX",
     question_text: "CSS의 'position: absolute'는 항상 브라우저 뷰포트를 기준으로 배치된다.",
     options: ["O", "X"],
-    correct_option: 1,
+    correct_options: [1],
     points: 100,
     time_limit: 15,
     explanation: "position: absolute는 static이 아닌 가장 가까운 조상 요소를 기준으로 배치됩니다. 해당 조상이 없다면 최상위 html 요소가 기준이 됩니다."
@@ -37,7 +37,7 @@ const OFFLINE_DEMO_QUESTIONS = [
     question_type: "MULTIPLE",
     question_text: "JavaScript에서 비동기 작업의 상태(Pending/Fulfilled/Rejected)를 나타내는 객체는?",
     options: ["Callback", "Observable", "Promise", "Generator"],
-    correct_option: 2,
+    correct_options: [2],
     points: 100,
     time_limit: 15,
     explanation: "Promise 객체는 비동기 연산의 현재 상태를 캡슐화합니다."
@@ -54,10 +54,10 @@ let state = {
   username: "",
   currentQuestion: null, // 현재 화면에 렌더링된 문제 객체 (DB row 또는 오프라인 데모 문제)
   currentTimeLimit: TIMER_LIMIT, // 현재 문제의 제한시간(초) — 문제별로 가변
-  selectedOptionIdx: null, // 제출 전 사용자가 선택해둔 옵션 (제출 버튼을 눌러야 확정됨)
+  selectedOptionIndices: [], // 제출 전 사용자가 선택해둔 옵션들 (제출 버튼을 눌러야 확정됨, 복수 선택 가능)
   offlineIdx: 0, // 오프라인 모드 전용 순차 진행 인덱스
   score: 0,
-  answers: [], // Stores index of selected options, -1 for timeout (오프라인 모드 전용)
+  answers: [], // Stores arrays of selected option indices, [] for timeout/무응답 (오프라인 모드 전용)
   timeLeft: 15,
   timerInterval: null,
   isAnswered: false,
@@ -158,6 +158,7 @@ const elements = {
   questionTimeLimitInput: document.getElementById("question-time-limit-input"),
   questionSubmitBtn: document.getElementById("question-submit-btn"),
   questionCancelEditBtn: document.getElementById("question-cancel-edit-btn"),
+  questionDeleteBtn: document.getElementById("question-delete-btn"),
 
   // 리더보드 (참가자 대기 화면)
   leaderboardList: document.getElementById("leaderboard-list"),
@@ -216,6 +217,7 @@ function init() {
   elements.themeToggleBtn.addEventListener("click", toggleTheme);
   elements.questionForm.addEventListener("submit", handleQuestionFormSubmit);
   elements.questionCancelEditBtn.addEventListener("click", cancelEditQuestion);
+  elements.questionDeleteBtn.addEventListener("click", handleDeleteQuestion);
   elements.questionForm.querySelectorAll('input[name="question-type"]').forEach((radio) => {
     radio.addEventListener("change", () => renderQuestionOptionFields());
   });
@@ -844,14 +846,14 @@ function renderQuestionOptionFields(prefill) {
   const presetOptions = prefill && prefill.options.length === optionCount
     ? prefill.options
     : (type === "OX" ? ["O", "X"] : ["", "", "", ""]);
-  const correctIdx = prefill ? prefill.correct_option : 0;
+  const correctIndices = prefill ? prefill.correct_options : [0];
 
   elements.questionOptionsFields.innerHTML = "";
   presetOptions.forEach((presetValue, idx) => {
     const row = document.createElement("div");
     row.className = "question-option-row";
     row.innerHTML = `
-      <input type="radio" name="question-correct" value="${idx}" ${idx === correctIdx ? "checked" : ""}>
+      <input type="checkbox" name="question-correct" value="${idx}" ${correctIndices.includes(idx) ? "checked" : ""}>
       <input type="text" class="question-option-input" placeholder="보기 ${idx + 1}" value="${presetValue}" ${type === "OX" ? "readonly" : ""} required>
     `;
     elements.questionOptionsFields.appendChild(row);
@@ -866,7 +868,7 @@ async function handleQuestionFormSubmit(e) {
   const questionText = elements.questionTextInput.value.trim();
   const optionInputs = Array.from(elements.questionOptionsFields.querySelectorAll(".question-option-input"));
   const options = optionInputs.map(input => input.value.trim());
-  const correctRadio = elements.questionForm.querySelector('input[name="question-correct"]:checked');
+  const correctCheckboxes = Array.from(elements.questionForm.querySelectorAll('input[name="question-correct"]:checked'));
   const points = parseInt(elements.questionPointsInput.value, 10);
   const timeLimit = parseInt(elements.questionTimeLimitInput.value, 10);
 
@@ -878,12 +880,12 @@ async function handleQuestionFormSubmit(e) {
     alert("모든 보기를 입력해주세요.");
     return;
   }
-  if (!correctRadio) {
-    alert("정답을 선택해주세요.");
+  if (correctCheckboxes.length === 0) {
+    alert("정답을 최소 1개 선택해주세요.");
     return;
   }
-  if (!points || points <= 0) {
-    alert("배점은 1 이상의 숫자여야 합니다.");
+  if (isNaN(points) || points < 0) {
+    alert("배점은 0 이상의 숫자여야 합니다.");
     return;
   }
   if (!timeLimit || timeLimit <= 0) {
@@ -905,7 +907,7 @@ async function handleQuestionFormSubmit(e) {
     question_type: type,
     question_text: questionText,
     options: options,
-    correct_option: parseInt(correctRadio.value, 10),
+    correct_options: correctCheckboxes.map(cb => parseInt(cb.value, 10)),
     points: points,
     time_limit: timeLimit
   };
@@ -947,6 +949,7 @@ function startEditQuestion(question) {
 
   elements.questionSubmitBtn.textContent = "수정 완료";
   elements.questionCancelEditBtn.style.display = "inline-block";
+  elements.questionDeleteBtn.style.display = "inline-block";
   elements.questionForm.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
@@ -959,6 +962,36 @@ function cancelEditQuestion() {
   renderQuestionOptionFields();
   elements.questionSubmitBtn.textContent = "문제 등록하기";
   elements.questionCancelEditBtn.style.display = "none";
+  elements.questionDeleteBtn.style.display = "none";
+}
+
+// 9.4d 관리자: 수정 중인 문제를 삭제
+async function handleDeleteQuestion() {
+  if (!state.editingQuestionId) return;
+
+  const isActive = state.editingQuestionId === state.activeQuestionId;
+  const confirmMessage = isActive
+    ? "지금 활성화되어 참가자들이 풀고 있는 문제입니다. 삭제하면 참가자 화면에 영향을 줄 수 있습니다. 정말 삭제하시겠습니까?"
+    : "이 문제와 관련된 모든 응답 기록이 함께 삭제됩니다. 정말 삭제하시겠습니까?";
+  if (!confirm(confirmMessage)) return;
+
+  elements.questionDeleteBtn.disabled = true;
+  try {
+    const { error } = await supabaseClient
+      .from('questions')
+      .delete()
+      .eq('id', state.editingQuestionId);
+    if (error) throw error;
+
+    cancelEditQuestion();
+    await loadQuestionList();
+    alert("문제가 삭제되었습니다.");
+  } catch (err) {
+    console.error("문제 삭제 실패:", err);
+    alert("문제 삭제에 실패했습니다: " + err.message);
+  } finally {
+    elements.questionDeleteBtn.disabled = false;
+  }
 }
 
 // 9.4d 참가자/관리자 공용: 대기 화면에 표시할 환영 문구 조회
@@ -1228,7 +1261,7 @@ async function clearLastQuestionReveal() {
 }
 
 // 9.8 참가자 응답을 quiz_answers 테이블에 기록
-async function submitAnswer(questionId, selectedOption, isCorrect) {
+async function submitAnswer(questionId, selectedOptions, isCorrect, scoreRatio) {
   if (!supabaseClient || !state.session) return;
 
   try {
@@ -1238,8 +1271,9 @@ async function submitAnswer(questionId, selectedOption, isCorrect) {
         {
           user_id: state.session.user.id,
           question_id: questionId,
-          selected_option: selectedOption,
+          selected_options: selectedOptions,
           is_correct: isCorrect,
+          score_ratio: scoreRatio,
           activated_at: state.activeQuestionActivatedAt
         }
       ]);
@@ -1266,12 +1300,14 @@ async function subscribeToAnswerDistribution(questionId) {
 
     const { data, error } = await supabaseClient
       .from('quiz_answers')
-      .select('selected_option')
+      .select('selected_options')
       .eq('question_id', questionId);
 
     if (!error && data) {
       data.forEach(row => {
-        state.answerTally[row.selected_option] = (state.answerTally[row.selected_option] || 0) + 1;
+        (row.selected_options || []).forEach(opt => {
+          state.answerTally[opt] = (state.answerTally[opt] || 0) + 1;
+        });
       });
     }
 
@@ -1282,8 +1318,9 @@ async function subscribeToAnswerDistribution(questionId) {
       .on('postgres_changes', {
         event: 'INSERT', schema: 'public', table: 'quiz_answers', filter: `question_id=eq.${questionId}`
       }, (payload) => {
-        const opt = payload.new.selected_option;
-        state.answerTally[opt] = (state.answerTally[opt] || 0) + 1;
+        (payload.new.selected_options || []).forEach(opt => {
+          state.answerTally[opt] = (state.answerTally[opt] || 0) + 1;
+        });
         renderAnswerDistribution();
       })
       .subscribe();
@@ -1393,12 +1430,14 @@ async function loadQuizReview() {
     state.reviewTally = {};
     const { data: answerRows, error: countError } = await supabaseClient
       .from('quiz_answers')
-      .select('selected_option')
+      .select('selected_options')
       .eq('question_id', state.lastQuestionId);
 
     if (!countError && answerRows) {
       answerRows.forEach(row => {
-        state.reviewTally[row.selected_option] = (state.reviewTally[row.selected_option] || 0) + 1;
+        (row.selected_options || []).forEach(opt => {
+          state.reviewTally[opt] = (state.reviewTally[opt] || 0) + 1;
+        });
       });
     }
 
@@ -1410,8 +1449,9 @@ async function loadQuizReview() {
       .on('postgres_changes', {
         event: 'INSERT', schema: 'public', table: 'quiz_answers', filter: `question_id=eq.${reviewQuestionId}`
       }, (payload) => {
-        const opt = payload.new.selected_option;
-        state.reviewTally[opt] = (state.reviewTally[opt] || 0) + 1;
+        (payload.new.selected_options || []).forEach(opt => {
+          state.reviewTally[opt] = (state.reviewTally[opt] || 0) + 1;
+        });
         renderQuizReviewOptions(questionRow);
       })
       .subscribe();
@@ -1429,7 +1469,7 @@ function renderQuizReviewOptions(questionRow) {
   elements.quizReviewOptions.innerHTML = questionRow.options.map((optionText, idx) => {
     const count = state.reviewTally[idx] || 0;
     const percent = totalCount > 0 ? Math.round((count / totalCount) * 100) : 0;
-    const isCorrect = idx === questionRow.correct_option;
+    const isCorrect = questionRow.correct_options.includes(idx);
     return `
       <div class="distribution-row${isCorrect ? ' distribution-row-correct' : ''}">
         <span class="distribution-label">${String.fromCharCode(65 + idx)}. ${optionText}${isCorrect ? ' ✓ 정답' : ''}</span>
@@ -1446,7 +1486,7 @@ function renderQuizReviewOptions(questionRow) {
 function loadQuestion(questionRow) {
   state.currentQuestion = questionRow;
   state.isAnswered = false;
-  state.selectedOptionIdx = null;
+  state.selectedOptionIndices = [];
   state.currentTimeLimit = questionRow.time_limit || TIMER_LIMIT;
 
   // 라이브 모드에서는 문제가 실제로 활성화된 시각(activated_at) 기준으로 남은 시간을 계산합니다.
@@ -1539,100 +1579,115 @@ function resetTimerProgressCircle() {
   elements.timerProgress.style.stroke = "#34d399";
 }
 
-// 11. 옵션 선택 (아직 확정 아님 — "제출하기" 버튼을 눌러야 정답 처리됩니다)
+// 11. 옵션 선택 (아직 확정 아님 — "제출하기" 버튼을 눌러야 정답 처리됩니다. 복수 선택 가능)
 function handleSelectOption(selectedIdx, selectedBtn) {
   if (state.isAnswered) return;
 
-  state.selectedOptionIdx = selectedIdx;
+  const alreadySelected = state.selectedOptionIndices.includes(selectedIdx);
+  if (alreadySelected) {
+    state.selectedOptionIndices = state.selectedOptionIndices.filter(idx => idx !== selectedIdx);
+    selectedBtn.classList.remove("selected");
+  } else {
+    state.selectedOptionIndices.push(selectedIdx);
+    selectedBtn.classList.add("selected");
+  }
 
-  const optionButtons = elements.optionsContainer.querySelectorAll(".option-btn");
-  optionButtons.forEach(btn => btn.classList.remove("selected"));
-  selectedBtn.classList.add("selected");
-
-  elements.submitAnswerBtn.disabled = false;
+  elements.submitAnswerBtn.disabled = state.selectedOptionIndices.length === 0;
 }
 
 // 11b. 제출 버튼 클릭 → 선택된 답을 확정 채점
 function handleSubmitAnswer() {
   if (state.isAnswered) return;
-  if (state.selectedOptionIdx === null) {
+  if (state.selectedOptionIndices.length === 0) {
     alert("답을 선택한 후 제출해주세요.");
     return;
   }
-  gradeAnswer(state.selectedOptionIdx);
+  gradeAnswer(state.selectedOptionIndices);
 }
 
 // 12. Handle Timeout — 선택해둔 답이 있으면 그대로 자동 제출, 없으면 무응답 처리
 function handleTimeout() {
-  gradeAnswer(state.selectedOptionIdx === null ? -1 : state.selectedOptionIdx);
+  gradeAnswer(state.selectedOptionIndices);
 }
 
 // 13. 채점 확정 (제출 버튼 클릭 또는 시간초과 시 공통으로 호출)
-function gradeAnswer(selectedIdx) {
+// selectedIndices: 사용자가 선택한 옵션 인덱스 배열 (무응답/시간초과 시 빈 배열)
+function gradeAnswer(selectedIndices) {
   if (state.isAnswered) return;
   state.isAnswered = true;
   clearInterval(state.timerInterval);
 
-  state.answers.push(selectedIdx);
+  state.answers.push(selectedIndices);
 
   const currentQuestion = state.currentQuestion;
-  const isCorrect = selectedIdx === currentQuestion.correct_option;
+  const correctSet = new Set(currentQuestion.correct_options);
+  const selectedSet = new Set(selectedIndices);
+
+  // 복수 정답 채점: (맞춘 정답 수 - 잘못 고른 오답 수) / 전체 정답 수, 0~1 사이로 클램프
+  // (단일 정답 문제에서는 자연스럽게 0 또는 1이 되어 기존 all-or-nothing 채점과 동일하게 동작합니다.)
+  const correctHitCount = [...selectedSet].filter(idx => correctSet.has(idx)).length;
+  const wrongHitCount = [...selectedSet].filter(idx => !correctSet.has(idx)).length;
+  const scoreRatio = Math.max(0, Math.min(1, (correctHitCount - wrongHitCount) / correctSet.size));
+  const isCorrect = scoreRatio > 0;
+
   const optionButtons = elements.optionsContainer.querySelectorAll(".option-btn");
   const isLiveMode = !!(supabaseClient && state.session);
-  const selectedBtn = selectedIdx >= 0 ? optionButtons[selectedIdx] : null;
 
-  if (isCorrect) {
-    // Add success styling
-    selectedBtn.classList.add("correct");
-    selectedBtn.querySelector(".option-status-icon").innerHTML = `
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" width="20" height="20">
-        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
-      </svg>
-    `;
+  const checkIconHtml = `
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" width="20" height="20">
+      <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+    </svg>
+  `;
+  const wrongIconHtml = `
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" width="20" height="20">
+      <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+    </svg>
+  `;
 
-    if (!isLiveMode) {
-      // 오프라인 모드 전용: 로컬 점수 산정 (100점 기본 + 남은 시간 보너스)
-      const baseScore = 100;
-      const bonusScore = state.timeLeft * 10;
-      state.score += baseScore + bonusScore;
-      elements.currentScoreText.textContent = state.score;
-    }
+  if (selectedIndices.length === 0) {
+    // 아무것도 선택하지 않은 채 시간초과된 경우
+    elements.timerText.textContent = "⏱️";
   } else {
-    if (selectedBtn) {
-      // Add wrong styling
-      selectedBtn.classList.add("wrong");
-      selectedBtn.querySelector(".option-status-icon").innerHTML = `
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" width="20" height="20">
-          <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
-        </svg>
-      `;
-    } else {
-      // 아무것도 선택하지 않은 채 시간초과된 경우
-      elements.timerText.textContent = "⏱️";
-    }
+    selectedIndices.forEach(idx => {
+      const btn = optionButtons[idx];
+      if (correctSet.has(idx)) {
+        btn.classList.add("correct");
+        btn.querySelector(".option-status-icon").innerHTML = checkIconHtml;
+      } else {
+        btn.classList.add("wrong");
+        btn.querySelector(".option-status-icon").innerHTML = wrongIconHtml;
+      }
+    });
+  }
 
-    // Highlight the correct answer
-    const correctBtn = optionButtons[currentQuestion.correct_option];
+  // 선택하지 않고 놓친 정답도 표시
+  currentQuestion.correct_options.forEach(idx => {
+    if (selectedSet.has(idx)) return;
+    const correctBtn = optionButtons[idx];
     correctBtn.classList.add("correct");
-    correctBtn.querySelector(".option-status-icon").innerHTML = `
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" width="20" height="20">
-        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
-      </svg>
-    `;
+    correctBtn.querySelector(".option-status-icon").innerHTML = checkIconHtml;
+  });
+
+  if (!isLiveMode && scoreRatio > 0) {
+    // 오프라인 모드 전용: 로컬 점수 산정 (100점 기본 + 남은 시간 보너스) * 정답 비율
+    const baseScore = 100;
+    const bonusScore = state.timeLeft * 10;
+    state.score += Math.round((baseScore + bonusScore) * scoreRatio);
+    elements.currentScoreText.textContent = state.score;
   }
 
   // Disable all options + submit button
   optionButtons.forEach(btn => btn.disabled = true);
   elements.submitAnswerBtn.disabled = true;
 
-  finishAnswering(currentQuestion.id, selectedIdx, isCorrect);
+  finishAnswering(currentQuestion.id, selectedIndices, isCorrect, scoreRatio);
 }
 
 // 14. 응답 완료 후 흐름 분기 (라이브 모드: 대기 화면 복귀 / 오프라인 모드: 다음 문제로 자동 진행)
-function finishAnswering(questionId, selectedOption, isCorrect) {
+function finishAnswering(questionId, selectedOptions, isCorrect, scoreRatio) {
   if (supabaseClient && state.session) {
     elements.quizFooterMessage.textContent = "응답이 제출되었습니다. 관리자가 다음 문제를 활성화할 때까지 기다려주세요...";
-    submitAnswer(questionId, selectedOption, isCorrect);
+    submitAnswer(questionId, selectedOptions, isCorrect, scoreRatio);
     setTimeout(async () => {
       elements.waitingMessage.textContent = "응답을 제출했습니다. 관리자가 다음 문제를 활성화하면 자동으로 화면이 전환됩니다.";
       switchScreen(elements.welcomeScreen);
@@ -1663,7 +1718,11 @@ async function showResults() {
   // Math Correct ratio
   let correctCount = 0;
   state.answers.forEach((ans, idx) => {
-    if (ans === OFFLINE_DEMO_QUESTIONS[idx].correct_option) {
+    const correctSet = new Set(OFFLINE_DEMO_QUESTIONS[idx].correct_options);
+    const selectedSet = new Set(ans);
+    const isCorrect = correctSet.size === selectedSet.size &&
+      [...correctSet].every(i => selectedSet.has(i));
+    if (isCorrect) {
       correctCount++;
     }
   });
@@ -1747,17 +1806,22 @@ function renderReviewList() {
   elements.reviewList.innerHTML = "";
   
   OFFLINE_DEMO_QUESTIONS.forEach((q, idx) => {
-    const userAnswerIdx = state.answers[idx];
-    const isCorrect = userAnswerIdx === q.correct_option;
+    const userAnswerIndices = state.answers[idx] || [];
+    const correctSet = new Set(q.correct_options);
+    const selectedSet = new Set(userAnswerIndices);
+    const isCorrect = correctSet.size === selectedSet.size &&
+      [...correctSet].every(i => selectedSet.has(i));
 
     // Status text
     let statusText = "오답";
     if (isCorrect) statusText = "정답";
-    else if (userAnswerIdx === -1) statusText = "시간 초과";
+    else if (userAnswerIndices.length === 0) statusText = "시간 초과";
 
     // User response text
-    const userSelectedText = userAnswerIdx === -1 ? "선택하지 않음" : q.options[userAnswerIdx];
-    const correctText = q.options[q.correct_option];
+    const userSelectedText = userAnswerIndices.length === 0
+      ? "선택하지 않음"
+      : userAnswerIndices.map(i => q.options[i]).join(", ");
+    const correctText = q.correct_options.map(i => q.options[i]).join(", ");
 
     const item = document.createElement("div");
     item.className = "review-item";
