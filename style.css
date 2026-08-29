@@ -571,8 +571,19 @@ body.light-theme .progress-bar-container {
   display: flex;
   justify-content: center;
   align-items: center;
+  gap: 10px;
   margin-left: 12px;
 }
+
+.mute-toggle-btn {
+  padding: 6px;
+}
+
+.sound-icon { width: 18px; height: 18px; display: block; }
+.mute-icon { width: 18px; height: 18px; display: none; }
+
+#mute-toggle-btn.muted .sound-icon { display: none; }
+#mute-toggle-btn.muted .mute-icon { display: block; }
 
 .timer-ring-container {
   position: relative;

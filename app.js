@@ -61,6 +61,8 @@ let state = {
   timeLeft: 15,
   timerInterval: null,
   isAnswered: false,
+  audioCtx: null, // 타이머 비프/Gong 사운드용 Web Audio Context (지연 생성)
+  isMuted: false,
   isSignUpMode: false, // Toggle between Login and Signup mode
 
   // Live Quiz (Admin Mode) 관련 상태
@@ -87,6 +89,7 @@ const elements = {
   appLoading: document.getElementById("app-loading"),
   appContainer: document.getElementById("app-container"),
   themeToggleBtn: document.getElementById("theme-toggle-btn"),
+  muteToggleBtn: document.getElementById("mute-toggle-btn"),
 
   // Screens
   welcomeScreen: document.getElementById("welcome-screen"),
@@ -215,6 +218,7 @@ function init() {
   elements.adminClearLastQuestionBtn.addEventListener("click", clearLastQuestionReveal);
   elements.retryBtn.addEventListener("click", resetQuiz);
   elements.themeToggleBtn.addEventListener("click", toggleTheme);
+  elements.muteToggleBtn.addEventListener("click", toggleMute);
   elements.questionForm.addEventListener("submit", handleQuestionFormSubmit);
   elements.questionCancelEditBtn.addEventListener("click", cancelEditQuestion);
   elements.questionDeleteBtn.addEventListener("click", handleDeleteQuestion);
@@ -233,6 +237,11 @@ function init() {
     document.body.classList.add("dark-theme");
     document.body.classList.remove("light-theme");
   }
+
+  // Restore Mute Preference from localStorage
+  state.isMuted = localStorage.getItem("muted") === "true";
+  elements.muteToggleBtn.classList.toggle("muted", state.isMuted);
+  bgmAudio.muted = state.isMuted;
 
   // 문제 등록 폼 초기 렌더 (기본 선택: OX)
   renderQuestionOptionFields();
@@ -731,6 +740,14 @@ function toggleTheme() {
     document.body.classList.remove("light-theme");
     localStorage.setItem("theme", "dark");
   }
+}
+
+// 7b. Mute Toggle Logic
+function toggleMute() {
+  state.isMuted = !state.isMuted;
+  localStorage.setItem("muted", state.isMuted ? "true" : "false");
+  elements.muteToggleBtn.classList.toggle("muted", state.isMuted);
+  bgmAudio.muted = state.isMuted;
 }
 
 // 8. Navigation: Switch Screens
@@ -1482,6 +1499,55 @@ function renderQuizReviewOptions(questionRow) {
   }).join("");
 }
 
+// 9b. Timer Sound Synthesis (Web Audio API — 외부 오디오 파일 없이 톤을 직접 생성)
+function getAudioContext() {
+  if (!state.audioCtx) {
+    state.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  if (state.audioCtx.state === "suspended") {
+    state.audioCtx.resume();
+  }
+  return state.audioCtx;
+}
+
+function playTone(frequency, duration, volume = 0.25) {
+  if (state.isMuted) return;
+  const ctx = getAudioContext();
+  const oscillator = ctx.createOscillator();
+  const gainNode = ctx.createGain();
+  oscillator.type = "sine";
+  oscillator.frequency.value = frequency;
+  gainNode.gain.setValueAtTime(volume, ctx.currentTime);
+  gainNode.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + duration);
+  oscillator.connect(gainNode).connect(ctx.destination);
+  oscillator.start();
+  oscillator.stop(ctx.currentTime + duration);
+}
+
+function playBeep() {
+  playTone(880, 0.15, 0.25);
+}
+
+function playGong() {
+  playTone(220, 1.4, 0.3);
+  playTone(330, 1.4, 0.15); // 배음을 살짝 겹쳐 종소리 질감
+}
+
+// 9c. Background Music (BGM) — 문제 풀이 중에만 재생
+const bgmAudio = new Audio("bgm.mp3");
+bgmAudio.loop = true;
+bgmAudio.volume = 0.3; // 비프/Gong 효과음보다 낮게, 배경음 성격 유지
+
+function playBgm() {
+  bgmAudio.currentTime = 0;
+  bgmAudio.play().catch(() => {}); // 브라우저 자동재생 정책으로 거부돼도 조용히 무시
+}
+
+function stopBgm() {
+  bgmAudio.pause();
+  bgmAudio.currentTime = 0;
+}
+
 // 10. Quiz Render & Timer Engine
 function loadQuestion(questionRow) {
   state.currentQuestion = questionRow;
@@ -1544,9 +1610,13 @@ function loadQuestion(questionRow) {
 function startTimer() {
   clearInterval(state.timerInterval);
   updateTimerUI();
+  playBgm();
 
   state.timerInterval = setInterval(() => {
     state.timeLeft--;
+    if (state.timeLeft > 0 && state.timeLeft <= 3) {
+      playBeep();
+    }
     updateTimerUI();
 
     if (state.timeLeft <= 0) {
@@ -1607,6 +1677,7 @@ function handleSubmitAnswer() {
 
 // 12. Handle Timeout — 선택해둔 답이 있으면 그대로 자동 제출, 없으면 무응답 처리
 function handleTimeout() {
+  playGong();
   gradeAnswer(state.selectedOptionIndices);
 }
 
@@ -1616,6 +1687,7 @@ function gradeAnswer(selectedIndices) {
   if (state.isAnswered) return;
   state.isAnswered = true;
   clearInterval(state.timerInterval);
+  stopBgm();
 
   state.answers.push(selectedIndices);
 
