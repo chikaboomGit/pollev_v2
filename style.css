@@ -902,10 +902,9 @@ body.light-theme .option-marker {
 }
 
 .distribution-label {
-  flex: 0 0 40%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  flex: 0 0 60%;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
 .distribution-bar-track {
