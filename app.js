@@ -1581,23 +1581,27 @@ function stopBgm() {
 
 // 새로고침 직후처럼 사용자 제스처 없이 곧바로 문제 화면(활성 문제 재접속)에 진입하면,
 // 브라우저의 자동재생 정책 때문에 AudioContext가 suspended 상태로 남고 bgmAudio.play()도
-// 조용히 거부되어 BGM/비프/공 소리가 전혀 나지 않습니다. 페이지에서의 첫 클릭/터치/키 입력을
-// 감지해 오디오를 한 번 "잠금 해제"함으로써, 이후 사용자 제스처 없이 호출되는 자동 재생도
-// 정상적으로 소리가 나도록 합니다.
+// 조용히 거부되어 BGM/비프/공 소리가 전혀 나지 않습니다. 페이지에서의 클릭/터치/키 입력을
+// 감지해 오디오를 "잠금 해제"함으로써, 이후 사용자 제스처 없이 호출되는 자동 재생도 정상적으로
+// 소리가 나도록 합니다. 첫 시도가 아직 이르거나(오디오 파일 로딩 전 등) 실패할 수 있으므로,
+// 실제로 재생이 성공할 때까지 이후 입력마다 계속 재시도합니다.
 let audioUnlocked = false;
 function unlockAudioPlayback() {
   if (audioUnlocked) return;
-  audioUnlocked = true;
   getAudioContext();
   bgmAudio.play().then(() => {
+    audioUnlocked = true;
     // 지금 재생 중인 문제가 없다면(단순 잠금 해제 목적이었다면) 다시 정지시켜 무음 상태를 유지합니다.
     if (!(state.currentQuestion && !state.isAnswered)) {
       stopBgm();
     }
-  }).catch(() => {});
+    ["click", "keydown", "touchstart"].forEach((eventName) => {
+      document.removeEventListener(eventName, unlockAudioPlayback);
+    });
+  }).catch(() => {}); // 아직 허용되지 않았다면 다음 사용자 입력 때 다시 시도합니다.
 }
 ["click", "keydown", "touchstart"].forEach((eventName) => {
-  document.addEventListener(eventName, unlockAudioPlayback, { once: true });
+  document.addEventListener(eventName, unlockAudioPlayback);
 });
 
 // 10. Quiz Render & Timer Engine
