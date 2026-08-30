@@ -63,6 +63,7 @@ let state = {
   isAnswered: false,
   audioCtx: null, // 타이머 비프/Gong 사운드용 Web Audio Context (지연 생성)
   isMuted: false,
+  clockOffsetMs: 0, // (DB 서버 시각 - 이 기기의 로컬 시각). 참가자 타이머 계산 시 기기 간 시계 오차를 보정하는 데 사용됩니다.
   isSignUpMode: false, // Toggle between Login and Signup mode
 
   // Live Quiz (Admin Mode) 관련 상태
@@ -249,6 +250,8 @@ function init() {
   // Supabase Setup
   const isSupabaseReady = setupSupabase();
   if (isSupabaseReady) {
+    syncClockOffset();
+
     // Listen for Auth changes
     supabaseClient.auth.onAuthStateChange(async (event, session) => {
       const hadSessionBefore = !!state.session;
@@ -382,6 +385,25 @@ function setupSupabase() {
     console.error("Supabase 초기화 실패:", err);
     return false;
   }
+}
+
+// 이 기기의 시계와 DB 서버 시계 사이의 오차를 계산해 캐시합니다.
+// (관리자가 문제를 활성화한 시각과 참가자 기기의 현재 시각을 비교해 남은 시간을 계산하는 로직이
+// 있는데, 두 기기의 로컬 시계가 어긋나 있으면 남은 시간이 실제보다 많거나 적게 표시될 수 있습니다.
+// get_server_time() RPC로 서버 시각을 1회 조회해 오차를 보정합니다.)
+async function syncClockOffset() {
+  try {
+    const { data, error } = await supabaseClient.rpc('get_server_time');
+    if (error || !data) return;
+    state.clockOffsetMs = new Date(data).getTime() - Date.now();
+  } catch (err) {
+    console.error("서버 시각 동기화 실패:", err.message);
+  }
+}
+
+// 기기 시계 오차가 보정된 "현재 시각". quiz_state의 서버 타임스탬프와 비교할 때 사용합니다.
+function getServerNow() {
+  return Date.now() + state.clockOffsetMs;
 }
 
 // Fetch Profile Username
@@ -1211,7 +1233,7 @@ function startAdminCountdown() {
   let autoDeactivating = false;
 
   const tick = () => {
-    const elapsedSeconds = (Date.now() - activatedAtMs) / 1000;
+    const elapsedSeconds = (getServerNow() - activatedAtMs) / 1000;
     const remaining = Math.max(0, Math.ceil(timeLimit - elapsedSeconds));
 
     const countdownEl = document.getElementById("admin-active-countdown");
@@ -1566,9 +1588,11 @@ function loadQuestion(questionRow) {
   // 새로고침/재접속으로 이 화면에 다시 진입해도 타이머가 매번 처음부터 리셋되지 않도록 하기 위함입니다.
   let initialTimeLeft = state.currentTimeLimit;
   if (supabaseClient && state.session && state.activeQuestionActivatedAt) {
-    const elapsedSeconds = (Date.now() - new Date(state.activeQuestionActivatedAt).getTime()) / 1000;
-    // 관리자/참가자 기기 간 시계가 어긋나 elapsedSeconds가 음수로 계산되더라도
-    // 문제에 설정된 제한시간보다 더 많은 시간이 표시되지 않도록 상한을 클램프합니다.
+    // getServerNow()는 이 기기와 DB 서버 시계 사이의 오차(clockOffsetMs)를 보정한 시각이라,
+    // 기기별 로컬 시계가 어긋나 있어도 남은 시간이 정확하게 계산됩니다.
+    const elapsedSeconds = (getServerNow() - new Date(state.activeQuestionActivatedAt).getTime()) / 1000;
+    // syncClockOffset()이 아직 끝나지 않은 극히 짧은 초기 구간 등 예외 상황에 대비해
+    // 문제에 설정된 제한시간을 넘는 값이 표시되지 않도록 상한을 한 번 더 클램프합니다.
     initialTimeLeft = Math.min(state.currentTimeLimit, Math.max(0, Math.ceil(state.currentTimeLimit - elapsedSeconds)));
   }
   state.timeLeft = initialTimeLeft;

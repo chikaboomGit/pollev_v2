@@ -392,6 +392,41 @@ alter view public.leaderboard set (security_invoker = true);
 -- 인증된 사용자는 모든 프로필의 닉네임을 조회할 수 있게 허용하는 정책을 추가합니다.
 create policy "인증된 사용자는 리더보드용으로 모든 프로필을 조회할 수 있다."
   on public.profiles for select to authenticated using (true);
+
+-- 26. [마이그레이션] 참가자 타이머가 기기 간 시계 오차로 부정확해지는 문제 해결
+-- 26a. quiz_state.updated_at/last_activated_at을 관리자 기기의 로컬 시각이 아닌
+--      DB 서버 시각(now())으로 강제해, 관리자 기기 시계가 어긋나 있어도
+--      "문제 활성화 시각"이 항상 정확하도록 만듭니다.
+create or replace function public.set_quiz_state_server_time()
+returns trigger as $$
+begin
+  new.updated_at = timezone('utc'::text, now());
+  -- last_activated_at은 클라이언트가 "새로 활성화됨"을 의미하는 값(NULL이 아니고 이전과 다른 값)을
+  -- 보낼 때만 서버 시각으로 재보정합니다. 이렇게 해야 비활성화(필드를 아예 보내지 않아 기존 값 유지)나
+  -- "마지막 문제 공개 초기화"(명시적으로 NULL로 설정)를 트리거가 되돌리지 않습니다.
+  if new.last_activated_at is not null and new.last_activated_at is distinct from old.last_activated_at then
+    new.last_activated_at = new.updated_at;
+  end if;
+  return new;
+end;
+$$ language plpgsql;
+
+drop trigger if exists trg_quiz_state_server_time on public.quiz_state;
+create trigger trg_quiz_state_server_time
+  before update on public.quiz_state
+  for each row execute function public.set_quiz_state_server_time();
+
+-- 26b. 참가자/관리자 기기가 본인 시계와 DB 서버 시계의 오차(clock skew)를 보정할 수 있도록
+--      서버의 현재 시각을 반환하는 RPC를 추가합니다. (app.js가 세션 시작 시 1회 호출해 오차를 계산합니다.)
+create or replace function public.get_server_time()
+returns timestamptz
+language sql
+stable
+as $$
+  select now();
+$$;
+
+grant execute on function public.get_server_time() to anon, authenticated;
 ```
 
 **Realtime 활성화**: Supabase 대시보드에서 `Database` → `Replication`으로 이동해 `quiz_state`와 `quiz_answers` 테이블의 Realtime 토글을 모두 켜주세요 (답안 분포 실시간 표시는 `quiz_answers` INSERT 이벤트 구독이 필요합니다). 또는 SQL Editor에서:
