@@ -1534,7 +1534,7 @@ function playGong() {
 }
 
 // 9c. Background Music (BGM) — 문제 풀이 중에만 재생
-const bgmAudio = new Audio("bgm.mp3");
+const bgmAudio = new Audio("bgm.m4a");
 bgmAudio.loop = true;
 bgmAudio.volume = 0.3; // 비프/Gong 효과음보다 낮게, 배경음 성격 유지
 
