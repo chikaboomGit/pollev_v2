@@ -1052,6 +1052,7 @@ async function loadWelcomeMessage() {
     if (error) throw error;
     if (data && data.welcome_message) {
       elements.welcomeSubtitleText.textContent = data.welcome_message;
+      document.title = data.welcome_message;
       if (state.isAdmin) {
         elements.welcomeMessageInput.value = data.welcome_message;
       }
@@ -1082,6 +1083,7 @@ async function handleWelcomeMessageSubmit(e) {
     if (error) throw error;
 
     elements.welcomeSubtitleText.textContent = message;
+    document.title = message;
     alert("환영 문구가 저장되었습니다.");
   } catch (err) {
     console.error("환영 문구 저장 실패:", err);
