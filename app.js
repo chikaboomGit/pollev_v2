@@ -824,6 +824,13 @@ async function handleActiveQuestionChange(questionId, activatedAt) {
   }
 
   if (questionId === null || questionId === undefined) {
+    // 참가자가 아직 답을 제출하지 못한 상태에서 관리자가 문제를 비활성화한 경우,
+    // 화면 전환만으로는 타이머/BGM이 멈추지 않으므로 여기서 명시적으로 정리합니다.
+    if (!state.isAnswered) {
+      clearInterval(state.timerInterval);
+      state.timerInterval = null;
+      stopBgm();
+    }
     elements.waitingMessage.textContent = "관리자가 문제를 활성화하면 자동으로 화면이 전환됩니다. 잠시만 기다려주세요...";
     switchScreen(elements.welcomeScreen);
     await loadLeaderboard();
@@ -1560,7 +1567,9 @@ function loadQuestion(questionRow) {
   let initialTimeLeft = state.currentTimeLimit;
   if (supabaseClient && state.session && state.activeQuestionActivatedAt) {
     const elapsedSeconds = (Date.now() - new Date(state.activeQuestionActivatedAt).getTime()) / 1000;
-    initialTimeLeft = Math.max(0, Math.ceil(state.currentTimeLimit - elapsedSeconds));
+    // 관리자/참가자 기기 간 시계가 어긋나 elapsedSeconds가 음수로 계산되더라도
+    // 문제에 설정된 제한시간보다 더 많은 시간이 표시되지 않도록 상한을 클램프합니다.
+    initialTimeLeft = Math.min(state.currentTimeLimit, Math.max(0, Math.ceil(state.currentTimeLimit - elapsedSeconds)));
   }
   state.timeLeft = initialTimeLeft;
 
