@@ -839,6 +839,303 @@ body.light-theme .option-marker {
   white-space: nowrap;
 }
 
+/* 문제 폴더 그룹 (관리자) */
+.folder-form-row {
+  display: flex;
+  gap: 10px;
+  align-items: stretch;
+}
+
+.folder-form-row .input-wrapper {
+  flex: 1;
+}
+
+.folder-group {
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.folder-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 8px 10px;
+}
+
+.folder-toggle-btn {
+  flex: 1;
+  min-width: 160px;
+  background: none;
+  border: none;
+  color: var(--text-main);
+  font-family: var(--font-title);
+  font-weight: 700;
+  font-size: 0.95rem;
+  text-align: left;
+  cursor: pointer;
+  padding: 4px 0;
+  overflow-wrap: anywhere;
+}
+
+.folder-actions {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.folder-action-btn {
+  padding: 6px 10px;
+  font-size: 0.8rem;
+}
+
+.folder-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 10px 10px;
+}
+
+.folder-group.collapsed .folder-body {
+  display: none;
+}
+
+.folder-empty {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+/* 순서 이동 ▲▼ 버튼 */
+.move-btns {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 0 0 auto;
+}
+
+.folder-actions .move-btn {
+  padding: 6px 8px;
+}
+
+.move-btn {
+  padding: 2px 8px;
+  font-size: 0.7rem;
+  line-height: 1.2;
+  flex: 1;
+}
+
+.move-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.question-folder-select {
+  width: 100%;
+  margin-top: 6px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--input-border);
+  background: var(--input-bg);
+  color: var(--text-main);
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+}
+
+.question-folder-select option {
+  background: var(--bg-app);
+  color: var(--text-main);
+}
+
+.question-anonymous-group {
+  margin: 12px 0;
+}
+
+.question-anonymous-group label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.question-opinion-hint {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  margin: 6px 0 0;
+}
+
+/* 의견수렴 (퀴즈 화면 입력 + 공용 피드) */
+.opinion-container {
+  margin-top: 8px;
+}
+
+.opinion-input-box {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.opinion-input {
+  width: 100%;
+  resize: vertical;
+  background: var(--input-bg);
+  border: 1px solid var(--input-border);
+  color: var(--text-main);
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-body);
+  font-size: 1rem;
+  outline: none;
+  transition: var(--transition-normal);
+}
+
+.opinion-input:focus {
+  border-color: var(--input-focus-border);
+}
+
+.opinion-input:disabled {
+  opacity: 0.5;
+}
+
+.opinion-input-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.opinion-char-count {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.opinion-feed {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  text-align: left;
+}
+
+.opinion-empty {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.opinion-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--option-bg);
+  border: 1px solid var(--option-border);
+}
+
+.opinion-item.is-mine {
+  border-color: var(--secondary);
+}
+
+.opinion-rank {
+  flex: 0 0 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--primary-glow);
+  font-weight: 700;
+  font-size: 0.85rem;
+}
+
+.opinion-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.opinion-item .opinion-content {
+  margin: 0 0 4px;
+  font-size: 0.95rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.opinion-meta {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.opinion-vote-btn,
+.opinion-delete-btn {
+  flex: 0 0 auto;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--card-border);
+  background: transparent;
+  color: var(--text-main);
+  font-family: var(--font-title);
+  font-weight: 700;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: var(--transition-normal);
+}
+
+.opinion-vote-btn:hover:not(:disabled) {
+  border-color: var(--secondary);
+}
+
+.opinion-vote-btn.voted {
+  background: var(--primary-glow);
+  border-color: var(--secondary);
+}
+
+.opinion-vote-btn:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.opinion-delete-btn {
+  color: var(--error);
+  border-color: var(--error);
+  font-size: 0.75rem;
+}
+
+/* 대기 화면: 진행 중인 의견수렴 보드 */
+.opinion-board-box {
+  margin-top: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  text-align: left;
+}
+
+.opinion-board-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 8px;
+}
+
+/* 관리자: 의견 피드 패널 */
+.admin-opinion-panel {
+  margin-top: 16px;
+}
+
+.admin-opinion-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.admin-opinion-header h4 {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
 /* 문제 등록 폼 (관리자) */
 .question-form {
   margin-bottom: 20px;

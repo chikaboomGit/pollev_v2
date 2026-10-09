@@ -180,6 +180,11 @@
               </div>
             </div>
 
+            <div id="opinion-board-box" class="opinion-board-box" style="display: none;">
+              <h4>💬 진행 중인 의견수렴</h4>
+              <div id="opinion-board-list" class="opinion-board-list"></div>
+            </div>
+
             <div class="leaderboard-box">
               <h4>🏆 리더보드 (누적 점수)</h4>
               <ol id="leaderboard-list" class="leaderboard-list"></ol>
@@ -203,6 +208,18 @@
               <button type="submit" id="welcome-message-submit-btn" class="btn btn-primary">문구 저장하기</button>
             </form>
 
+            <!-- 폴더 추가 폼 -->
+            <form id="folder-form" class="question-form">
+              <h4>폴더 관리</h4>
+              <div class="folder-form-row">
+                <div class="input-wrapper">
+                  <input type="text" id="folder-name-input" placeholder="새 폴더 이름 (최대 50자)" maxlength="50" required>
+                  <span class="focus-border"></span>
+                </div>
+                <button type="submit" id="folder-submit-btn" class="btn btn-primary">폴더 추가</button>
+              </div>
+            </form>
+
             <!-- 문제 등록 폼 -->
             <form id="question-form" class="question-form">
               <h4>새 문제 등록</h4>
@@ -211,7 +228,14 @@
                 <div class="question-type-toggle">
                   <label><input type="radio" name="question-type" value="OX" checked> OX 퀴즈</label>
                   <label><input type="radio" name="question-type" value="MULTIPLE"> 4지선다</label>
+                  <label><input type="radio" name="question-type" value="OPINION"> 의견수렴</label>
                 </div>
+              </div>
+              <div class="input-group">
+                <label for="question-folder-select">폴더</label>
+                <select id="question-folder-select" class="question-folder-select">
+                  <option value="">미분류</option>
+                </select>
               </div>
               <div class="input-group">
                 <label for="question-text-input">문제 내용</label>
@@ -223,9 +247,13 @@
               <div id="question-options-fields" class="question-options-fields">
                 <!-- 문제 유형에 따라 동적으로 보기/정답 라디오가 생성됩니다 -->
               </div>
+              <div id="question-anonymous-group" class="question-anonymous-group" style="display: none;">
+                <label><input type="checkbox" id="question-anonymous-input"> 제출자 익명 처리 (참가자 화면에 작성자 닉네임을 표시하지 않음)</label>
+                <p class="question-opinion-hint">참가자는 의견을 여러 개 제출하고 다른 의견에 추천할 수 있습니다. 추천 마감 시 추천 순위 5분위로 배점의 100/80/60/40/20%를 부여합니다.</p>
+              </div>
               <div class="input-group-row">
                 <div class="input-group">
-                  <label for="question-points-input">배점</label>
+                  <label for="question-points-input" id="question-points-label">배점</label>
                   <div class="input-wrapper">
                     <input type="number" id="question-points-input" min="0" value="100" required>
                     <span class="focus-border"></span>
@@ -254,6 +282,15 @@
 
             <!-- 실시간 답안 분포 (관리자) -->
             <div id="admin-answer-distribution" class="answer-distribution" style="display: none;"></div>
+
+            <!-- 의견수렴 피드 (관리자: 작성자 닉네임 항상 표시) -->
+            <div id="admin-opinion-panel" class="admin-opinion-panel" style="display: none;">
+              <div class="admin-opinion-header">
+                <h4 id="admin-opinion-title"></h4>
+                <button type="button" id="admin-opinion-close-btn" class="btn btn-secondary admin-question-action-btn">닫기</button>
+              </div>
+              <div id="admin-opinion-feed" class="opinion-feed"></div>
+            </div>
           </div>
 
           <div class="start-actions">
@@ -307,12 +344,24 @@
         </div>
 
         <!-- 답 제출: 옵션 선택 후 이 버튼을 눌러야 정답으로 확정됩니다 -->
-        <div class="submit-answer-box">
+        <div id="submit-answer-box" class="submit-answer-box">
           <button type="button" id="submit-answer-btn" class="btn btn-primary" disabled>제출하기</button>
         </div>
 
         <!-- 실시간 답안 분포 (참가자) -->
         <div id="answer-distribution" class="answer-distribution"></div>
+
+        <!-- 의견수렴 문항: 의견 입력 + 추천순 피드 -->
+        <div id="opinion-container" class="opinion-container" style="display: none;">
+          <div class="opinion-input-box">
+            <textarea id="opinion-input" class="opinion-input" rows="3" maxlength="300" placeholder="의견을 입력하세요 (여러 개 제출할 수 있습니다)"></textarea>
+            <div class="opinion-input-actions">
+              <span id="opinion-char-count" class="opinion-char-count">0 / 300</span>
+              <button type="button" id="opinion-submit-btn" class="btn btn-primary">의견 제출</button>
+            </div>
+          </div>
+          <div id="opinion-feed" class="opinion-feed"></div>
+        </div>
 
         <!-- Quiz Footer: 응답 후 관리자의 다음 문제 활성화를 기다리는 안내 -->
         <div class="quiz-footer">

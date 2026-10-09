@@ -75,8 +75,16 @@ let state = {
   answerDistributionChannel: null,
   answerTally: {}, // { optionIdx: count } — 현재 활성 문제의 실시간 답안 분포
   questionList: [], // 관리자 패널에 표시할 등록된 문제 목록 캐시
+  folderList: [], // 관리자 패널의 문제 폴더 목록 캐시 (sort_order 순)
+  collapsedFolders: {}, // { folderKey: true } — 접힌 폴더 그룹 (localStorage에 저장, 미분류는 "none")
   answerCounts: {}, // { question_id: 참여자 수 } — 관리자 패널의 초기화 버튼에 표시
+  opinionCounts: {}, // { question_id: 의견 수 } — 관리자 패널의 의견수렴 문항에 표시
   adminCountdownInterval: null, // 관리자 패널의 활성 문제 남은시간 표시 + 자동 비활성화 타이머
+  adminOpinionQuestionId: null, // 관리자 패널에서 의견 피드를 보고 있는 의견수렴 문항 id
+
+  // 의견수렴 관련 상태
+  opinionChannel: null, // opinions/opinion_votes/questions 변경 구독 채널 (로그인 시 1회)
+  reviewOpinionQuestionId: null, // 대기 화면 "최근 문제 리뷰"에 의견 피드로 표시 중인 문항 id
 
   // 참가자 대기 화면의 "마지막 문제 리뷰" 관련 상태
   lastQuestionId: null, // 마지막으로 활성화됐던 문제 id (비활성화 이후에도 유지됨)
@@ -148,6 +156,15 @@ const elements = {
   adminDeactivateBtn: document.getElementById("admin-deactivate-btn"),
   adminClearLastQuestionBtn: document.getElementById("admin-clear-last-question-btn"),
   adminAnswerDistribution: document.getElementById("admin-answer-distribution"),
+  adminOpinionPanel: document.getElementById("admin-opinion-panel"),
+  adminOpinionTitle: document.getElementById("admin-opinion-title"),
+  adminOpinionCloseBtn: document.getElementById("admin-opinion-close-btn"),
+  adminOpinionFeed: document.getElementById("admin-opinion-feed"),
+
+  // 폴더 추가 폼 (관리자)
+  folderForm: document.getElementById("folder-form"),
+  folderNameInput: document.getElementById("folder-name-input"),
+  folderSubmitBtn: document.getElementById("folder-submit-btn"),
 
   // 환영 문구 수정 폼 (관리자)
   welcomeMessageForm: document.getElementById("welcome-message-form"),
@@ -158,6 +175,10 @@ const elements = {
   questionForm: document.getElementById("question-form"),
   questionTextInput: document.getElementById("question-text-input"),
   questionOptionsFields: document.getElementById("question-options-fields"),
+  questionFolderSelect: document.getElementById("question-folder-select"),
+  questionAnonymousGroup: document.getElementById("question-anonymous-group"),
+  questionAnonymousInput: document.getElementById("question-anonymous-input"),
+  questionPointsLabel: document.getElementById("question-points-label"),
   questionPointsInput: document.getElementById("question-points-input"),
   questionTimeLimitInput: document.getElementById("question-time-limit-input"),
   questionSubmitBtn: document.getElementById("question-submit-btn"),
@@ -166,6 +187,10 @@ const elements = {
 
   // 리더보드 (참가자 대기 화면)
   leaderboardList: document.getElementById("leaderboard-list"),
+
+  // 진행 중인 의견수렴 보드 (참가자 대기 화면)
+  opinionBoardBox: document.getElementById("opinion-board-box"),
+  opinionBoardList: document.getElementById("opinion-board-list"),
 
   // 마지막 문제 리뷰 (참가자 대기 화면)
   quizReviewEmpty: document.getElementById("quiz-review-empty"),
@@ -182,8 +207,16 @@ const elements = {
   timerProgress: document.getElementById("timer-progress"),
   questionText: document.getElementById("question-text"),
   optionsContainer: document.getElementById("options-container"),
+  submitAnswerBox: document.getElementById("submit-answer-box"),
   submitAnswerBtn: document.getElementById("submit-answer-btn"),
   answerDistribution: document.getElementById("answer-distribution"),
+
+  // 의견수렴 문항 (참가자 퀴즈 화면)
+  opinionContainer: document.getElementById("opinion-container"),
+  opinionInput: document.getElementById("opinion-input"),
+  opinionCharCount: document.getElementById("opinion-char-count"),
+  opinionSubmitBtn: document.getElementById("opinion-submit-btn"),
+  opinionFeed: document.getElementById("opinion-feed"),
 
   // Result Screen Elements
   resultGreeting: document.getElementById("result-greeting"),
@@ -224,10 +257,32 @@ function init() {
   elements.questionCancelEditBtn.addEventListener("click", cancelEditQuestion);
   elements.questionDeleteBtn.addEventListener("click", handleDeleteQuestion);
   elements.questionForm.querySelectorAll('input[name="question-type"]').forEach((radio) => {
-    radio.addEventListener("change", () => renderQuestionOptionFields());
+    radio.addEventListener("change", () => {
+      // 의견수렴은 의견 작성·추천에 시간이 더 필요하므로, 제한시간이 기본값 그대로라면 120초로 바꿔 제안합니다.
+      if (radio.value === "OPINION" && elements.questionTimeLimitInput.value === "15") {
+        elements.questionTimeLimitInput.value = "120";
+      } else if (radio.value !== "OPINION" && elements.questionTimeLimitInput.value === "120") {
+        elements.questionTimeLimitInput.value = "15";
+      }
+      renderQuestionOptionFields();
+    });
   });
   elements.submitAnswerBtn.addEventListener("click", handleSubmitAnswer);
   elements.welcomeMessageForm.addEventListener("submit", handleWelcomeMessageSubmit);
+  elements.folderForm.addEventListener("submit", handleFolderFormSubmit);
+  elements.adminOpinionCloseBtn.addEventListener("click", () => {
+    state.adminOpinionQuestionId = null;
+    elements.adminOpinionPanel.style.display = "none";
+  });
+  elements.opinionSubmitBtn.addEventListener("click", handleSubmitOpinion);
+  elements.opinionInput.addEventListener("input", updateOpinionCharCount);
+
+  // Restore collapsed folder groups from localStorage
+  try {
+    state.collapsedFolders = JSON.parse(localStorage.getItem("collapsedFolders") || "{}");
+  } catch (err) {
+    state.collapsedFolders = {};
+  }
 
   // Restore Theme Preferences from localStorage
   const savedTheme = localStorage.getItem("theme");
@@ -297,6 +352,7 @@ function init() {
         }
 
         await subscribeToQuizState();
+        subscribeToOpinionChanges();
       } else {
         // User logged out
         state.username = "";
@@ -304,6 +360,11 @@ function init() {
         state.activeQuestionId = null;
         state.activeQuestionActivatedAt = null;
         state.questionList = [];
+        state.folderList = [];
+        state.adminOpinionQuestionId = null;
+        state.reviewOpinionQuestionId = null;
+        elements.adminOpinionPanel.style.display = "none";
+        elements.opinionBoardBox.style.display = "none";
         elements.userNickname.textContent = "";
         elements.authContainer.style.display = "block";
         elements.startContainer.style.display = "none";
@@ -322,6 +383,10 @@ function init() {
         if (state.reviewDistributionChannel) {
           supabaseClient.removeChannel(state.reviewDistributionChannel);
           state.reviewDistributionChannel = null;
+        }
+        if (state.opinionChannel) {
+          supabaseClient.removeChannel(state.opinionChannel);
+          state.opinionChannel = null;
         }
         clearInterval(state.adminCountdownInterval);
         state.adminCountdownInterval = null;
@@ -835,12 +900,20 @@ async function handleActiveQuestionChange(questionId, activatedAt) {
     // 활성 문제가 바뀔 때마다(특히 비활성화 시) 문제별 참여자 수를 최신 상태로 반영합니다.
     await loadQuestionList();
     startAdminCountdown();
-    if (questionId !== null && questionId !== undefined) {
+    const activeQuestion = state.questionList.find(q => q.id === questionId);
+    if (activeQuestion && !isOpinionQuestion(activeQuestion)) {
       subscribeToAnswerDistribution(questionId);
-    } else if (state.answerDistributionChannel) {
-      supabaseClient.removeChannel(state.answerDistributionChannel);
-      state.answerDistributionChannel = null;
+    } else {
+      if (state.answerDistributionChannel) {
+        supabaseClient.removeChannel(state.answerDistributionChannel);
+        state.answerDistributionChannel = null;
+      }
       elements.adminAnswerDistribution.style.display = "none";
+      // 의견수렴 문항이 활성화되면 답안 분포 대신 의견 피드를 자동으로 띄웁니다.
+      if (activeQuestion) {
+        state.adminOpinionQuestionId = activeQuestion.id;
+        await renderAdminOpinionFeed();
+      }
     }
     return;
   }
@@ -857,14 +930,7 @@ async function handleActiveQuestionChange(questionId, activatedAt) {
     switchScreen(elements.welcomeScreen);
     await loadLeaderboard();
     await loadQuizReview();
-    return;
-  }
-
-  const alreadyAnswered = await hasAnsweredQuestion(state.session.user.id, questionId);
-  if (alreadyAnswered) {
-    elements.waitingMessage.textContent = "이미 응답을 제출한 문제입니다. 다음 문제를 기다려주세요.";
-    switchScreen(elements.welcomeScreen);
-    await loadQuizReview();
+    await loadOpinionBoard();
     return;
   }
 
@@ -879,6 +945,22 @@ async function handleActiveQuestionChange(questionId, activatedAt) {
     return;
   }
 
+  // 의견수렴 문항은 여러 개 제출할 수 있으므로 "이미 응답함" 검사 없이 바로 진입합니다.
+  if (isOpinionQuestion(questionRow)) {
+    switchScreen(elements.quizScreen);
+    loadOpinionQuestion(questionRow);
+    return;
+  }
+
+  const alreadyAnswered = await hasAnsweredQuestion(state.session.user.id, questionId);
+  if (alreadyAnswered) {
+    elements.waitingMessage.textContent = "이미 응답을 제출한 문제입니다. 다음 문제를 기다려주세요.";
+    switchScreen(elements.welcomeScreen);
+    await loadQuizReview();
+    await loadOpinionBoard();
+    return;
+  }
+
   switchScreen(elements.quizScreen);
   loadQuestion(questionRow);
   subscribeToAnswerDistribution(questionId);
@@ -888,6 +970,17 @@ async function handleActiveQuestionChange(questionId, activatedAt) {
 // prefill이 주어지면(수정 모드) 기존 보기/정답 값을 채워 넣습니다.
 function renderQuestionOptionFields(prefill) {
   const type = elements.questionForm.querySelector('input[name="question-type"]:checked').value;
+
+  // 의견수렴은 보기/정답이 없고, 대신 익명 처리 옵션을 노출합니다.
+  const isOpinion = type === "OPINION";
+  elements.questionOptionsFields.style.display = isOpinion ? "none" : "flex";
+  elements.questionAnonymousGroup.style.display = isOpinion ? "block" : "none";
+  elements.questionPointsLabel.textContent = isOpinion ? "1위 그룹 배점" : "배점";
+  if (isOpinion) {
+    elements.questionOptionsFields.innerHTML = "";
+    return;
+  }
+
   const optionCount = type === "OX" ? 2 : 4;
   const presetOptions = prefill && prefill.options.length === optionCount
     ? prefill.options
@@ -918,15 +1011,18 @@ async function handleQuestionFormSubmit(e) {
   const points = parseInt(elements.questionPointsInput.value, 10);
   const timeLimit = parseInt(elements.questionTimeLimitInput.value, 10);
 
+  const isOpinion = type === "OPINION";
+  const folderId = elements.questionFolderSelect.value ? parseInt(elements.questionFolderSelect.value, 10) : null;
+
   if (!questionText) {
     alert("문제 내용을 입력해주세요.");
     return;
   }
-  if (options.some(opt => !opt)) {
+  if (!isOpinion && options.some(opt => !opt)) {
     alert("모든 보기를 입력해주세요.");
     return;
   }
-  if (correctCheckboxes.length === 0) {
+  if (!isOpinion && correctCheckboxes.length === 0) {
     alert("정답을 최소 1개 선택해주세요.");
     return;
   }
@@ -952,11 +1048,19 @@ async function handleQuestionFormSubmit(e) {
   const payload = {
     question_type: type,
     question_text: questionText,
-    options: options,
-    correct_options: correctCheckboxes.map(cb => parseInt(cb.value, 10)),
+    options: isOpinion ? [] : options,
+    correct_options: isOpinion ? [] : correctCheckboxes.map(cb => parseInt(cb.value, 10)),
     points: points,
-    time_limit: timeLimit
+    time_limit: timeLimit,
+    is_anonymous: isOpinion && elements.questionAnonymousInput.checked,
+    folder_id: folderId
   };
+
+  // 새로 등록하거나 다른 폴더로 옮기는 문제는 해당 폴더(또는 미분류)의 맨 끝에 배치합니다.
+  const editingQuestion = isEditing ? state.questionList.find(q => q.id === state.editingQuestionId) : null;
+  if (!editingQuestion || (editingQuestion.folder_id || null) !== folderId) {
+    payload.sort_order = getNextSortOrder(folderId);
+  }
 
   try {
     if (isEditing) {
@@ -992,6 +1096,8 @@ function startEditQuestion(question) {
   renderQuestionOptionFields(question);
   elements.questionPointsInput.value = question.points;
   elements.questionTimeLimitInput.value = question.time_limit;
+  elements.questionFolderSelect.value = question.folder_id || "";
+  elements.questionAnonymousInput.checked = !!question.is_anonymous;
 
   elements.questionSubmitBtn.textContent = "수정 완료";
   elements.questionCancelEditBtn.style.display = "inline-block";
@@ -1004,7 +1110,9 @@ function cancelEditQuestion() {
   state.editingQuestionId = null;
   elements.questionTextInput.value = "";
   elements.questionPointsInput.value = "100";
-  elements.questionTimeLimitInput.value = "15";
+  elements.questionTimeLimitInput.value = isOpinionTypeSelected() ? "120" : "15";
+  elements.questionAnonymousInput.checked = false;
+  // 폴더 선택은 유지해, 같은 폴더에 문제를 연속으로 등록하기 편하게 합니다.
   renderQuestionOptionFields();
   elements.questionSubmitBtn.textContent = "문제 등록하기";
   elements.questionCancelEditBtn.style.display = "none";
@@ -1094,102 +1202,417 @@ async function handleWelcomeMessageSubmit(e) {
   }
 }
 
-// 9.5 관리자: 등록된 문제 목록 조회 및 렌더 (문제별 참여자 수도 함께 집계)
+// 9.5 관리자: 등록된 문제·폴더 목록 조회 및 렌더 (문제별 참여자 수/의견 수도 함께 집계)
 async function loadQuestionList() {
-  const { data, error } = await supabaseClient
-    .from('questions')
-    .select('*')
-    .order('created_at', { ascending: true });
+  const [questionResult, folderResult, answerResult, opinionResult] = await Promise.all([
+    supabaseClient.from('questions').select('*')
+      .order('sort_order', { ascending: true })
+      .order('created_at', { ascending: true }),
+    supabaseClient.from('question_folders').select('*')
+      .order('sort_order', { ascending: true })
+      .order('created_at', { ascending: true }),
+    supabaseClient.from('quiz_answers').select('question_id'),
+    supabaseClient.from('opinions').select('question_id')
+  ]);
 
-  if (error) {
-    console.error("문제 목록 조회 실패:", error.message);
+  if (questionResult.error) {
+    console.error("문제 목록 조회 실패:", questionResult.error.message);
     return;
   }
 
-  state.questionList = data || [];
+  state.questionList = questionResult.data || [];
 
-  const { data: answerRows, error: countError } = await supabaseClient
-    .from('quiz_answers')
-    .select('question_id');
-
-  if (countError) {
-    console.error("참여자 수 집계 실패:", countError.message);
-    state.answerCounts = {};
+  if (folderResult.error) {
+    console.error("폴더 목록 조회 실패:", folderResult.error.message);
+    state.folderList = [];
   } else {
-    state.answerCounts = {};
-    (answerRows || []).forEach(row => {
+    state.folderList = folderResult.data || [];
+  }
+
+  state.answerCounts = {};
+  if (answerResult.error) {
+    console.error("참여자 수 집계 실패:", answerResult.error.message);
+  } else {
+    (answerResult.data || []).forEach(row => {
       state.answerCounts[row.question_id] = (state.answerCounts[row.question_id] || 0) + 1;
+    });
+  }
+
+  state.opinionCounts = {};
+  if (opinionResult.error) {
+    console.error("의견 수 집계 실패:", opinionResult.error.message);
+  } else {
+    (opinionResult.data || []).forEach(row => {
+      state.opinionCounts[row.question_id] = (state.opinionCounts[row.question_id] || 0) + 1;
     });
   }
 
   renderAdminPanel();
 }
 
-// 9.6 관리자 패널 렌더링 (DB에 등록된 문제 목록 기준)
+// 문제 등록 폼의 폴더 선택 목록을 최신 폴더 목록으로 갱신 (선택값은 유지)
+function renderFolderSelect() {
+  const currentValue = elements.questionFolderSelect.value;
+  elements.questionFolderSelect.innerHTML = '<option value="">미분류</option>';
+  state.folderList.forEach(folder => {
+    const option = document.createElement("option");
+    option.value = folder.id;
+    option.textContent = folder.name;
+    elements.questionFolderSelect.appendChild(option);
+  });
+  const stillExists = state.folderList.some(folder => String(folder.id) === currentValue);
+  elements.questionFolderSelect.value = stillExists ? currentValue : "";
+}
+
+// 폴더별로 문제를 묶습니다. 폴더 순서대로 나열하고 "미분류" 그룹은 항상 마지막에 둡니다.
+function getQuestionGroups() {
+  const folderIds = new Set(state.folderList.map(folder => folder.id));
+  const groups = state.folderList.map(folder => ({
+    folder,
+    questions: state.questionList.filter(q => q.folder_id === folder.id)
+  }));
+  groups.push({
+    folder: null,
+    questions: state.questionList.filter(q => !q.folder_id || !folderIds.has(q.folder_id))
+  });
+  return groups;
+}
+
+// 해당 폴더(null이면 미분류)의 맨 끝에 배치할 sort_order 값
+function getNextSortOrder(folderId) {
+  const group = getQuestionGroups().find(g => (g.folder ? g.folder.id : null) === folderId);
+  const orders = group ? group.questions.map(q => q.sort_order || 0) : [];
+  return orders.length > 0 ? Math.max(...orders) + 1 : 1;
+}
+
+function isOpinionQuestion(question) {
+  return !!question && question.question_type === "OPINION";
+}
+
+function isOpinionTypeSelected() {
+  return elements.questionForm.querySelector('input[name="question-type"]:checked').value === "OPINION";
+}
+
+// 9.6 관리자 패널 렌더링 (폴더 그룹 → 그룹 안의 문제 목록)
 function renderAdminPanel() {
   elements.adminQuestionList.innerHTML = "";
+  renderFolderSelect();
 
-  if (state.questionList.length === 0) {
+  if (state.questionList.length === 0 && state.folderList.length === 0) {
     elements.adminQuestionList.innerHTML = "<p>등록된 문제가 없습니다. 위 폼에서 문제를 먼저 등록해주세요.</p>";
     return;
   }
 
-  state.questionList.forEach((q) => {
-    const row = document.createElement("div");
-    row.className = "admin-question-row";
-
-    const isActive = state.activeQuestionId === q.id;
-    const participantCount = state.answerCounts[q.id] || 0;
-
-    const activateBtn = document.createElement("button");
-    activateBtn.type = "button";
-    activateBtn.className = "btn btn-secondary admin-question-btn";
-    activateBtn.textContent = `[${q.question_type === "OX" ? "OX" : "4지선다"} / ${q.points}점 / ${q.time_limit}초] ${q.question_text}`;
-    if (isActive) {
-      activateBtn.classList.add("active-question");
-      activateBtn.textContent += " (활성 중 — 다시 누르면 비활성화)";
-    }
-    // 이미 활성화된 문제를 다시 누르면 비활성화되도록 토글 처리 (관리자 진행 편의)
-    activateBtn.addEventListener("click", () => activateQuestion(isActive ? null : q.id));
-
-    const editBtn = document.createElement("button");
-    editBtn.type = "button";
-    editBtn.className = "btn btn-secondary admin-question-action-btn";
-    editBtn.textContent = "수정";
-    editBtn.addEventListener("click", () => startEditQuestion(q));
-
-    const resetBtn = document.createElement("button");
-    resetBtn.type = "button";
-    resetBtn.className = "btn btn-danger admin-question-action-btn";
-    resetBtn.textContent = `초기화 (참여 ${participantCount}명)`;
-    resetBtn.addEventListener("click", () => resetQuestionAnswers(q.id));
-
-    row.appendChild(activateBtn);
-    row.appendChild(editBtn);
-    row.appendChild(resetBtn);
-
-    if (isActive) {
-      const countdownSpan = document.createElement("span");
-      countdownSpan.id = "admin-active-countdown";
-      countdownSpan.className = "admin-countdown";
-      row.appendChild(countdownSpan);
-    }
-
-    elements.adminQuestionList.appendChild(row);
+  const groups = getQuestionGroups();
+  const folderGroupCount = groups.length - 1; // 마지막 미분류 그룹 제외
+  groups.forEach((group, groupIdx) => {
+    elements.adminQuestionList.appendChild(buildFolderGroup(group, groupIdx, folderGroupCount));
   });
+}
+
+function buildFolderGroup(group, groupIdx, folderGroupCount) {
+  const { folder, questions } = group;
+  const folderKey = folder ? String(folder.id) : "none";
+  // 활성 문제가 들어있는 폴더는 남은 시간 표시가 보이도록 항상 펼칩니다.
+  const hasActive = questions.some(q => q.id === state.activeQuestionId);
+  const isCollapsed = !!state.collapsedFolders[folderKey] && !hasActive;
+
+  const groupEl = document.createElement("div");
+  groupEl.className = "folder-group";
+  if (isCollapsed) groupEl.classList.add("collapsed");
+
+  const header = document.createElement("div");
+  header.className = "folder-header";
+
+  const toggleBtn = document.createElement("button");
+  toggleBtn.type = "button";
+  toggleBtn.className = "folder-toggle-btn";
+  toggleBtn.textContent = `${isCollapsed ? "▶" : "▼"} ${folder ? "📁" : "📂"} ${folder ? folder.name : "미분류"} (${questions.length})`;
+  toggleBtn.addEventListener("click", () => {
+    if (state.collapsedFolders[folderKey]) {
+      delete state.collapsedFolders[folderKey];
+    } else {
+      state.collapsedFolders[folderKey] = true;
+    }
+    localStorage.setItem("collapsedFolders", JSON.stringify(state.collapsedFolders));
+    renderAdminPanel();
+  });
+  header.appendChild(toggleBtn);
+
+  // 미분류 그룹은 이동/이름변경/삭제할 수 없습니다.
+  if (folder) {
+    const actions = document.createElement("div");
+    actions.className = "folder-actions";
+    actions.appendChild(buildMoveButton("▲", "폴더를 위로", groupIdx === 0, () => moveFolder(groupIdx, -1)));
+    actions.appendChild(buildMoveButton("▼", "폴더를 아래로", groupIdx === folderGroupCount - 1, () => moveFolder(groupIdx, 1)));
+
+    const renameBtn = document.createElement("button");
+    renameBtn.type = "button";
+    renameBtn.className = "btn btn-secondary folder-action-btn";
+    renameBtn.textContent = "이름변경";
+    renameBtn.addEventListener("click", () => renameFolder(folder));
+    actions.appendChild(renameBtn);
+
+    const deleteBtn = document.createElement("button");
+    deleteBtn.type = "button";
+    deleteBtn.className = "btn btn-danger folder-action-btn";
+    deleteBtn.textContent = "삭제";
+    deleteBtn.addEventListener("click", () => deleteFolder(folder));
+    actions.appendChild(deleteBtn);
+
+    header.appendChild(actions);
+  }
+  groupEl.appendChild(header);
+
+  const body = document.createElement("div");
+  body.className = "folder-body";
+  if (questions.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "folder-empty";
+    empty.textContent = "문제가 없습니다.";
+    body.appendChild(empty);
+  }
+  questions.forEach((q, idx) => {
+    body.appendChild(buildQuestionRow(q, idx, questions));
+  });
+  groupEl.appendChild(body);
+
+  return groupEl;
+}
+
+function buildMoveButton(label, title, disabled, onClick) {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "btn btn-secondary move-btn";
+  btn.textContent = label;
+  btn.title = title;
+  btn.setAttribute("aria-label", title);
+  btn.disabled = disabled;
+  btn.addEventListener("click", onClick);
+  return btn;
+}
+
+function buildQuestionRow(q, idx, groupQuestions) {
+  const row = document.createElement("div");
+  row.className = "admin-question-row";
+
+  const isActive = state.activeQuestionId === q.id;
+  const isOpinion = isOpinionQuestion(q);
+
+  const moveBox = document.createElement("div");
+  moveBox.className = "move-btns";
+  moveBox.appendChild(buildMoveButton("▲", "위로 이동", idx === 0, () => moveQuestion(groupQuestions, idx, -1)));
+  moveBox.appendChild(buildMoveButton("▼", "아래로 이동", idx === groupQuestions.length - 1, () => moveQuestion(groupQuestions, idx, 1)));
+
+  const activateBtn = document.createElement("button");
+  activateBtn.type = "button";
+  activateBtn.className = "btn btn-secondary admin-question-btn";
+  if (isOpinion) {
+    const opinionStatus = !q.opinion_opened_at ? "미진행" : (q.opinion_closed_at ? "마감" : "추천 진행중");
+    activateBtn.textContent = `[의견수렴 / ${q.points}점 / ${q.time_limit}초${q.is_anonymous ? " / 익명" : ""}] ${q.question_text} (의견 ${state.opinionCounts[q.id] || 0}개 · ${opinionStatus})`;
+  } else {
+    activateBtn.textContent = `[${q.question_type === "OX" ? "OX" : "4지선다"} / ${q.points}점 / ${q.time_limit}초] ${q.question_text}`;
+  }
+  if (isActive) {
+    activateBtn.classList.add("active-question");
+    activateBtn.textContent += " (활성 중 — 다시 누르면 비활성화)";
+  }
+  // 이미 활성화된 문제를 다시 누르면 비활성화되도록 토글 처리 (관리자 진행 편의)
+  activateBtn.addEventListener("click", () => activateQuestion(isActive ? null : q.id));
+
+  const editBtn = document.createElement("button");
+  editBtn.type = "button";
+  editBtn.className = "btn btn-secondary admin-question-action-btn";
+  editBtn.textContent = "수정";
+  editBtn.addEventListener("click", () => startEditQuestion(q));
+
+  row.appendChild(moveBox);
+  row.appendChild(activateBtn);
+  row.appendChild(editBtn);
+
+  if (isOpinion) {
+    const viewBtn = document.createElement("button");
+    viewBtn.type = "button";
+    viewBtn.className = "btn btn-secondary admin-question-action-btn";
+    viewBtn.textContent = "의견 보기";
+    viewBtn.addEventListener("click", async () => {
+      state.adminOpinionQuestionId = q.id;
+      await renderAdminOpinionFeed();
+      elements.adminOpinionPanel.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+    row.appendChild(viewBtn);
+
+    const closeBtn = document.createElement("button");
+    closeBtn.type = "button";
+    closeBtn.className = "btn btn-secondary admin-question-action-btn";
+    closeBtn.textContent = q.opinion_closed_at ? "마감 해제" : "추천 마감";
+    closeBtn.addEventListener("click", () => (q.opinion_closed_at ? reopenOpinion(q) : finalizeOpinion(q)));
+    row.appendChild(closeBtn);
+  }
+
+  const resetBtn = document.createElement("button");
+  resetBtn.type = "button";
+  resetBtn.className = "btn btn-danger admin-question-action-btn";
+  resetBtn.textContent = isOpinion
+    ? `초기화 (의견 ${state.opinionCounts[q.id] || 0}개)`
+    : `초기화 (참여 ${state.answerCounts[q.id] || 0}명)`;
+  resetBtn.addEventListener("click", () => resetQuestionAnswers(q.id));
+  row.appendChild(resetBtn);
+
+  if (isActive) {
+    const countdownSpan = document.createElement("span");
+    countdownSpan.id = "admin-active-countdown";
+    countdownSpan.className = "admin-countdown";
+    row.appendChild(countdownSpan);
+  }
+
+  return row;
+}
+
+// 정렬된 목록 순서대로 sort_order를 1부터 다시 매겨 저장합니다. (값이 달라진 행만 update)
+// 이웃 두 행만 교환하지 않고 전체를 재번호하는 이유: 마이그레이션 직후 등 sort_order가 중복된 경우에도 순서가 확실히 반영되도록 하기 위함
+async function saveSortOrder(table, orderedItems) {
+  const changed = orderedItems
+    .map((item, i) => ({ item, order: i + 1 }))
+    .filter(({ item, order }) => item.sort_order !== order);
+  const results = await Promise.all(changed.map(({ item, order }) =>
+    supabaseClient.from(table).update({ sort_order: order }).eq('id', item.id)
+  ));
+  const failed = results.find(result => result.error);
+  if (failed) throw failed.error;
+}
+
+// 9.6a 관리자: 같은 폴더 안에서 문제 순서 이동
+async function moveQuestion(groupQuestions, idx, direction) {
+  const targetIdx = idx + direction;
+  if (targetIdx < 0 || targetIdx >= groupQuestions.length) return;
+
+  const reordered = [...groupQuestions];
+  [reordered[idx], reordered[targetIdx]] = [reordered[targetIdx], reordered[idx]];
+
+  try {
+    await saveSortOrder('questions', reordered);
+  } catch (err) {
+    console.error("문제 순서 변경 실패:", err);
+    alert("문제 순서 변경에 실패했습니다: " + err.message);
+  }
+  await loadQuestionList();
+}
+
+// 9.6a 관리자: 폴더 순서 이동
+async function moveFolder(idx, direction) {
+  const targetIdx = idx + direction;
+  if (targetIdx < 0 || targetIdx >= state.folderList.length) return;
+
+  const reordered = [...state.folderList];
+  [reordered[idx], reordered[targetIdx]] = [reordered[targetIdx], reordered[idx]];
+
+  try {
+    await saveSortOrder('question_folders', reordered);
+  } catch (err) {
+    console.error("폴더 순서 변경 실패:", err);
+    alert("폴더 순서 변경에 실패했습니다: " + err.message);
+  }
+  await loadQuestionList();
+}
+
+// 9.6a 관리자: 폴더 추가 (맨 끝에 배치)
+async function handleFolderFormSubmit(e) {
+  e.preventDefault();
+
+  const name = elements.folderNameInput.value.trim();
+  if (!name) {
+    alert("폴더 이름을 입력해주세요.");
+    return;
+  }
+
+  elements.folderSubmitBtn.disabled = true;
+  try {
+    const nextOrder = state.folderList.length > 0
+      ? Math.max(...state.folderList.map(folder => folder.sort_order || 0)) + 1
+      : 1;
+    const { error } = await supabaseClient
+      .from('question_folders')
+      .insert([{ name, sort_order: nextOrder }]);
+    if (error) throw error;
+
+    elements.folderNameInput.value = "";
+    await loadQuestionList();
+  } catch (err) {
+    console.error("폴더 추가 실패:", err);
+    alert("폴더 추가에 실패했습니다: " + err.message);
+  } finally {
+    elements.folderSubmitBtn.disabled = false;
+  }
+}
+
+async function renameFolder(folder) {
+  const input = prompt("새 폴더 이름을 입력하세요.", folder.name);
+  if (input === null) return;
+  const name = input.trim();
+  if (!name || name.length > 50) {
+    alert("폴더 이름은 1자 이상 50자 이하로 입력해주세요.");
+    return;
+  }
+
+  try {
+    const { error } = await supabaseClient
+      .from('question_folders')
+      .update({ name })
+      .eq('id', folder.id);
+    if (error) throw error;
+    await loadQuestionList();
+  } catch (err) {
+    console.error("폴더 이름 변경 실패:", err);
+    alert("폴더 이름 변경에 실패했습니다: " + err.message);
+  }
+}
+
+// 폴더를 삭제하면 안에 있던 문제는 DB의 on delete set null에 의해 미분류로 이동합니다.
+async function deleteFolder(folder) {
+  if (!confirm(`'${folder.name}' 폴더를 삭제합니다. 폴더 안의 문제는 삭제되지 않고 미분류로 이동합니다. 계속하시겠습니까?`)) return;
+
+  try {
+    const { error } = await supabaseClient
+      .from('question_folders')
+      .delete()
+      .eq('id', folder.id);
+    if (error) throw error;
+
+    delete state.collapsedFolders[String(folder.id)];
+    localStorage.setItem("collapsedFolders", JSON.stringify(state.collapsedFolders));
+    await loadQuestionList();
+  } catch (err) {
+    console.error("폴더 삭제 실패:", err);
+    alert("폴더 삭제에 실패했습니다: " + err.message);
+  }
 }
 
 // 9.6b 관리자: 특정 문제에 쌓인 참가자 응답을 전부 삭제 (다시 풀 수 있는 상태로 초기화)
 async function resetQuestionAnswers(questionId) {
-  const proceed = confirm("이 문제에 대한 모든 참가자의 응답 기록을 삭제합니다. 계속하시겠습니까?");
+  const isOpinion = isOpinionQuestion(state.questionList.find(q => q.id === questionId));
+  const proceed = confirm(isOpinion
+    ? "이 문항의 모든 의견과 추천 기록을 삭제하고, 추천 마감도 해제합니다. 계속하시겠습니까?"
+    : "이 문제에 대한 모든 참가자의 응답 기록을 삭제합니다. 계속하시겠습니까?");
   if (!proceed) return;
 
   try {
-    const { error } = await supabaseClient
-      .from('quiz_answers')
-      .delete()
-      .eq('question_id', questionId);
-    if (error) throw error;
+    if (isOpinion) {
+      // 의견을 지우면 추천 기록은 FK on delete cascade로 함께 삭제됩니다.
+      const { error } = await supabaseClient
+        .from('opinions')
+        .delete()
+        .eq('question_id', questionId);
+      if (error) throw error;
+      const { error: reopenError } = await supabaseClient.rpc('reopen_opinion', { target_question_id: questionId });
+      if (reopenError) throw reopenError;
+    } else {
+      const { error } = await supabaseClient
+        .from('quiz_answers')
+        .delete()
+        .eq('question_id', questionId);
+      if (error) throw error;
+    }
 
     // 지금 진행 중인 문제를 초기화한 경우, quiz_state를 다시 갱신해 모든 참가자에게
     // "새로 풀 수 있는 상태"로 재브로드캐스트합니다 (타이머도 새 시각 기준으로 재시작됨).
@@ -1205,7 +1628,9 @@ async function resetQuestionAnswers(questionId) {
         })
         .eq('id', 1);
       if (restateError) throw restateError;
-      await subscribeToAnswerDistribution(questionId);
+      if (!isOpinion) {
+        await subscribeToAnswerDistribution(questionId);
+      }
     } else {
       // 비활성 문제를 초기화한 경우엔 quiz_state 변경이 없어 목록을 직접 새로고침해야
       // "초기화" 버튼의 참여자 수 표시가 즉시 0명으로 갱신됩니다.
@@ -1259,7 +1684,25 @@ function startAdminCountdown() {
 // 9.7 관리자: 문제 활성화/비활성화 (활성화 전, 직전 문제가 있었다면 5분위 채점을 먼저 마감)
 async function activateQuestion(questionId) {
   try {
-    if (state.activeQuestionId) {
+    const nextQuestion = state.questionList.find(q => q.id === questionId);
+    if (isOpinionQuestion(nextQuestion) && nextQuestion.opinion_closed_at) {
+      // 마감된 의견수렴은 의견 제출/추천이 막혀 있으므로, 다시 진행하려면 마감을 먼저 해제해야 합니다.
+      if (!confirm("이미 추천이 마감된 의견수렴입니다. 마감을 해제(확정 점수 0점으로 초기화)하고 다시 진행하시겠습니까?")) return;
+      const { error: reopenError } = await supabaseClient.rpc('reopen_opinion', { target_question_id: questionId });
+      if (reopenError) throw reopenError;
+    }
+    if (isOpinionQuestion(nextQuestion) && !nextQuestion.opinion_opened_at) {
+      // 처음 활성화되는 의견수렴은 진행 시작 시각을 기록해, 비활성화 이후에도 참가자 대기 화면에서 추천을 계속할 수 있게 합니다.
+      const { error: openError } = await supabaseClient
+        .from('questions')
+        .update({ opinion_opened_at: new Date().toISOString() })
+        .eq('id', questionId);
+      if (openError) throw openError;
+    }
+
+    // 의견수렴 문항은 관리자가 별도로 "추천 마감"할 때 채점하므로, 퀴즈 5분위 채점 마감은 건너뜁니다.
+    const prevQuestion = state.questionList.find(q => q.id === state.activeQuestionId);
+    if (state.activeQuestionId && !isOpinionQuestion(prevQuestion)) {
       const { error: finalizeError } = await supabaseClient.rpc('finalize_question_scoring', {
         target_question_id: state.activeQuestionId
       });
@@ -1306,6 +1749,402 @@ async function clearLastQuestionReveal() {
     console.error("마지막 문제 초기화 실패:", err);
     alert("초기화에 실패했습니다: " + err.message);
   }
+}
+
+// 9.7c 관리자: 의견수렴 추천 마감 → 추천 순위 5분위로 점수 확정
+async function finalizeOpinion(question) {
+  if (!confirm("추천을 마감하고 추천 순위에 따라 점수를 확정합니다. 마감 후에는 의견 제출과 추천이 불가합니다. 계속하시겠습니까?")) return;
+
+  try {
+    const { error } = await supabaseClient.rpc('finalize_opinion_scoring', { target_question_id: question.id });
+    if (error) throw error;
+
+    await loadQuestionList();
+    await renderAdminOpinionFeed();
+    alert("추천이 마감되고 점수가 확정되었습니다.");
+  } catch (err) {
+    console.error("추천 마감 실패:", err);
+    alert("추천 마감에 실패했습니다: " + err.message);
+  }
+}
+
+// 9.7d 관리자: 추천 마감 해제 (확정 점수는 0점으로 되돌아감)
+async function reopenOpinion(question) {
+  if (!confirm("마감을 해제하면 확정된 점수가 0점으로 돌아가고 다시 추천을 받을 수 있습니다. 계속하시겠습니까?")) return;
+
+  try {
+    const { error } = await supabaseClient.rpc('reopen_opinion', { target_question_id: question.id });
+    if (error) throw error;
+
+    await loadQuestionList();
+    await renderAdminOpinionFeed();
+  } catch (err) {
+    console.error("마감 해제 실패:", err);
+    alert("마감 해제에 실패했습니다: " + err.message);
+  }
+}
+
+// 9.7e 관리자: 선택한 의견수렴 문항의 피드 (익명 문항이어도 작성자 닉네임 표시 + 의견 삭제 가능)
+async function renderAdminOpinionFeed() {
+  const question = state.questionList.find(q => q.id === state.adminOpinionQuestionId);
+  if (!question) {
+    elements.adminOpinionPanel.style.display = "none";
+    return;
+  }
+
+  const opinions = await fetchOpinions(question.id);
+  if (!opinions || state.adminOpinionQuestionId !== question.id) return;
+
+  const statusText = question.opinion_closed_at ? "마감" : "추천 진행중";
+  elements.adminOpinionTitle.textContent = `💬 ${question.question_text} (${statusText}${question.is_anonymous ? " · 익명" : ""})`;
+  elements.adminOpinionPanel.style.display = "block";
+  renderOpinionFeed(elements.adminOpinionFeed, question, opinions, { canVote: false, adminMode: true });
+}
+
+// 의견 목록 조회: 추천수 내림차순 → 먼저 제출된 순으로 정렬
+async function fetchOpinions(questionId) {
+  const { data, error } = await supabaseClient
+    .from('opinions')
+    .select('id, content, user_id, created_at, points_awarded, author:profiles!opinions_user_id_fkey(username), opinion_votes(user_id)')
+    .eq('question_id', questionId);
+
+  if (error) {
+    console.error("의견 조회 실패:", error.message);
+    return null;
+  }
+
+  const myId = state.session.user.id;
+  return (data || []).map(row => ({
+    id: row.id,
+    content: row.content,
+    createdAt: row.created_at,
+    pointsAwarded: row.points_awarded,
+    authorName: (row.author && row.author.username) || "도전자",
+    voteCount: (row.opinion_votes || []).length,
+    votedByMe: (row.opinion_votes || []).some(vote => vote.user_id === myId),
+    isMine: row.user_id === myId
+  })).sort((a, b) => b.voteCount - a.voteCount || new Date(a.createdAt) - new Date(b.createdAt));
+}
+
+// 의견 피드 렌더 (참가자 퀴즈 화면 / 대기 화면 / 관리자 패널 공용)
+// 의견 내용과 닉네임은 사용자 입력이므로 XSS 방지를 위해 반드시 textContent로만 삽입합니다.
+function renderOpinionFeed(container, question, opinions, { canVote, adminMode = false }) {
+  container.innerHTML = "";
+
+  if (opinions.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "opinion-empty";
+    empty.textContent = "아직 제출된 의견이 없습니다.";
+    container.appendChild(empty);
+    return;
+  }
+
+  const isClosed = !!question.opinion_closed_at;
+  let rank = 0;
+  opinions.forEach((opinion, idx) => {
+    // 추천수가 같으면 같은 순위로 표시
+    if (idx === 0 || opinion.voteCount !== opinions[idx - 1].voteCount) {
+      rank = idx + 1;
+    }
+
+    const item = document.createElement("div");
+    item.className = "opinion-item";
+    if (opinion.isMine) item.classList.add("is-mine");
+
+    const rankEl = document.createElement("span");
+    rankEl.className = "opinion-rank";
+    rankEl.textContent = rank;
+
+    const body = document.createElement("div");
+    body.className = "opinion-body";
+
+    const contentEl = document.createElement("p");
+    contentEl.className = "opinion-content";
+    contentEl.textContent = opinion.content;
+
+    let authorLabel = opinion.authorName;
+    if (opinion.isMine) {
+      authorLabel = adminMode ? `${opinion.authorName} (나)` : "나";
+    } else if (question.is_anonymous && !adminMode) {
+      authorLabel = "익명";
+    }
+    const metaEl = document.createElement("span");
+    metaEl.className = "opinion-meta";
+    metaEl.textContent = isClosed && opinion.pointsAwarded > 0
+      ? `${authorLabel} · +${opinion.pointsAwarded}점`
+      : authorLabel;
+
+    body.appendChild(contentEl);
+    body.appendChild(metaEl);
+
+    const voteBtn = document.createElement("button");
+    voteBtn.type = "button";
+    voteBtn.className = "opinion-vote-btn";
+    if (opinion.votedByMe) voteBtn.classList.add("voted");
+    voteBtn.textContent = `👍 ${opinion.voteCount}`;
+    voteBtn.disabled = !canVote || isClosed || opinion.isMine;
+    if (opinion.isMine && canVote) voteBtn.title = "내 의견에는 추천할 수 없습니다.";
+    voteBtn.addEventListener("click", () => toggleOpinionVote(question, opinion, voteBtn));
+
+    item.appendChild(rankEl);
+    item.appendChild(body);
+    item.appendChild(voteBtn);
+
+    if (adminMode || (opinion.isMine && !isClosed)) {
+      const deleteBtn = document.createElement("button");
+      deleteBtn.type = "button";
+      deleteBtn.className = "opinion-delete-btn";
+      deleteBtn.textContent = "삭제";
+      deleteBtn.addEventListener("click", () => deleteOpinion(opinion));
+      item.appendChild(deleteBtn);
+    }
+
+    container.appendChild(item);
+  });
+}
+
+// 추천 / 추천 취소 토글
+async function toggleOpinionVote(question, opinion, voteBtn) {
+  if (question.opinion_closed_at || opinion.isMine) return;
+  voteBtn.disabled = true;
+
+  try {
+    const myId = state.session.user.id;
+    const { error } = opinion.votedByMe
+      ? await supabaseClient.from('opinion_votes').delete().eq('opinion_id', opinion.id).eq('user_id', myId)
+      : await supabaseClient.from('opinion_votes').insert([{ opinion_id: opinion.id, user_id: myId }]);
+    if (error) throw error;
+  } catch (err) {
+    console.error("추천 처리 실패:", err);
+    alert("추천 처리에 실패했습니다. 이미 추천이 마감되었을 수 있습니다.");
+  }
+  await refreshOpinionViews(false);
+}
+
+async function deleteOpinion(opinion) {
+  if (!confirm("이 의견을 삭제하시겠습니까? 받은 추천도 함께 삭제됩니다.")) return;
+
+  try {
+    const { error } = await supabaseClient.from('opinions').delete().eq('id', opinion.id);
+    if (error) throw error;
+  } catch (err) {
+    console.error("의견 삭제 실패:", err);
+    alert("의견 삭제에 실패했습니다: " + err.message);
+  }
+  await refreshOpinionViews(true);
+}
+
+// 의견/추천/문제(마감 상태) 변경을 실시간 구독합니다. (로그인 시 1회)
+// opinion_votes의 DELETE 이벤트는 필터를 걸 수 없어 테이블 전체를 구독하고, 변경이 오면 화면에 보이는 피드만 다시 조회합니다.
+function subscribeToOpinionChanges() {
+  if (!supabaseClient || state.opinionChannel) return;
+
+  state.opinionChannel = supabaseClient
+    .channel('opinion_changes')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'opinions' },
+      () => scheduleOpinionRefresh(true))
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'opinion_votes' },
+      () => scheduleOpinionRefresh(false))
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'questions' },
+      (payload) => {
+        // 참가자가 보고 있는 의견수렴 문항이 마감/해제되면 캐시된 문제 객체도 갱신해 추천 버튼 상태를 맞춥니다.
+        if (isOpinionQuestion(state.currentQuestion) && payload.new && payload.new.id === state.currentQuestion.id) {
+          state.currentQuestion = { ...state.currentQuestion, ...payload.new };
+        }
+        scheduleOpinionRefresh(false);
+      })
+    .subscribe();
+}
+
+// 추천이 몰릴 때 매 이벤트마다 재조회하지 않도록 300ms 디바운스합니다.
+let opinionRefreshTimer = null;
+let opinionRefreshNeedsList = false;
+function scheduleOpinionRefresh(includeList) {
+  opinionRefreshNeedsList = opinionRefreshNeedsList || includeList;
+  clearTimeout(opinionRefreshTimer);
+  opinionRefreshTimer = setTimeout(() => {
+    const needsList = opinionRefreshNeedsList;
+    opinionRefreshNeedsList = false;
+    refreshOpinionViews(needsList);
+  }, 300);
+}
+
+// 현재 화면에 보이는 의견 피드만 다시 조회/렌더합니다.
+// includeList: 관리자 문제 목록의 "의견 N개" 표시도 갱신할지 여부 (의견 추가/삭제 시에만)
+async function refreshOpinionViews(includeList) {
+  if (!supabaseClient || !state.session) return;
+
+  if (state.isAdmin) {
+    if (includeList) await loadQuestionList();
+    await renderAdminOpinionFeed();
+    return;
+  }
+
+  if (elements.quizScreen.classList.contains("active") && isOpinionQuestion(state.currentQuestion)) {
+    await renderParticipantOpinionFeed();
+  }
+  if (elements.welcomeScreen.classList.contains("active")) {
+    if (state.reviewOpinionQuestionId) await loadQuizReview();
+    await loadOpinionBoard();
+  }
+}
+
+// 9.12b 참가자 대기 화면: 비활성화됐지만 아직 추천이 마감되지 않은 의견수렴 문항들 (추천만 가능)
+// "최근 문제 리뷰"에 이미 표시 중인 문항은 중복되지 않도록 제외합니다.
+let isLoadingOpinionBoard = false;
+async function loadOpinionBoard() {
+  if (!supabaseClient || state.isAdmin || isLoadingOpinionBoard) return;
+  isLoadingOpinionBoard = true;
+
+  try {
+    const { data, error } = await supabaseClient
+      .from('questions')
+      .select('*')
+      .eq('question_type', 'OPINION')
+      .not('opinion_opened_at', 'is', null)
+      .is('opinion_closed_at', null)
+      .order('opinion_opened_at', { ascending: false });
+
+    if (error) throw error;
+
+    const questions = (data || []).filter(q => q.id !== state.reviewOpinionQuestionId);
+    const feeds = await Promise.all(questions.map(q => fetchOpinions(q.id)));
+
+    elements.opinionBoardList.innerHTML = "";
+    elements.opinionBoardBox.style.display = questions.length > 0 ? "block" : "none";
+
+    questions.forEach((question, idx) => {
+      const item = document.createElement("div");
+      item.className = "opinion-board-item";
+
+      const title = document.createElement("p");
+      title.className = "quiz-review-question-text";
+      title.textContent = question.is_anonymous ? `${question.question_text} (익명)` : question.question_text;
+
+      const feed = document.createElement("div");
+      feed.className = "opinion-feed";
+      renderOpinionFeed(feed, question, feeds[idx] || [], { canVote: true });
+
+      item.appendChild(title);
+      item.appendChild(feed);
+      elements.opinionBoardList.appendChild(item);
+    });
+  } catch (err) {
+    console.error("의견수렴 보드 조회 실패:", err.message);
+  } finally {
+    isLoadingOpinionBoard = false;
+  }
+}
+
+// 퀴즈 화면을 선택형(보기/제출/분포) 또는 의견수렴(입력/피드) 모드로 전환
+function setQuizMode(mode) {
+  const isOpinion = mode === "opinion";
+  elements.optionsContainer.style.display = isOpinion ? "none" : "";
+  elements.submitAnswerBox.style.display = isOpinion ? "none" : "";
+  elements.answerDistribution.style.display = isOpinion ? "none" : "";
+  elements.opinionContainer.style.display = isOpinion ? "block" : "none";
+}
+
+// 10b. 의견수렴 문항 진입 (참가자) — 타이머 동안 의견을 여러 개 제출하고, 피드에서 추천할 수 있습니다.
+function loadOpinionQuestion(questionRow) {
+  state.currentQuestion = questionRow;
+  state.isAnswered = false;
+  state.selectedOptionIndices = [];
+  state.currentTimeLimit = questionRow.time_limit || TIMER_LIMIT;
+
+  // 직전 퀴즈 문제의 답안 분포 구독이 남아 있으면 정리합니다.
+  if (state.answerDistributionChannel) {
+    supabaseClient.removeChannel(state.answerDistributionChannel);
+    state.answerDistributionChannel = null;
+  }
+
+  const initialTimeLeft = getInitialTimeLeft();
+  state.timeLeft = initialTimeLeft;
+
+  setQuizMode("opinion");
+  elements.questionPointsBadge.textContent = questionRow.points;
+  elements.currentScoreText.textContent = state.score;
+  elements.questionText.textContent = questionRow.question_text;
+  elements.opinionInput.value = "";
+  elements.opinionInput.disabled = false;
+  elements.opinionSubmitBtn.disabled = false;
+  updateOpinionCharCount();
+  elements.quizFooterMessage.textContent = questionRow.is_anonymous
+    ? "익명으로 진행되는 의견수렴입니다. 다른 참가자에게 작성자가 표시되지 않습니다."
+    : "";
+  elements.opinionFeed.innerHTML = "";
+
+  resetTimerProgressCircle();
+  renderParticipantOpinionFeed();
+
+  if (initialTimeLeft <= 0) {
+    // 재접속 시점에 이미 제한시간이 지난 경우: 제출만 막고 추천은 계속 가능
+    handleTimeout();
+    return;
+  }
+
+  startTimer();
+}
+
+async function renderParticipantOpinionFeed() {
+  const question = state.currentQuestion;
+  if (!isOpinionQuestion(question)) return;
+
+  const opinions = await fetchOpinions(question.id);
+  if (!opinions || state.currentQuestion !== question) return;
+  renderOpinionFeed(elements.opinionFeed, question, opinions, { canVote: true });
+}
+
+function updateOpinionCharCount() {
+  elements.opinionCharCount.textContent = `${elements.opinionInput.value.length} / 300`;
+}
+
+async function handleSubmitOpinion() {
+  const question = state.currentQuestion;
+  if (!isOpinionQuestion(question) || state.isAnswered) return;
+
+  const content = elements.opinionInput.value.trim();
+  if (!content) {
+    alert("의견을 입력해주세요.");
+    return;
+  }
+  if (content.length > 300) {
+    alert("의견은 300자 이하로 입력해주세요.");
+    return;
+  }
+
+  elements.opinionSubmitBtn.disabled = true;
+  elements.opinionSubmitBtn.textContent = "제출 중...";
+
+  try {
+    const { error } = await supabaseClient
+      .from('opinions')
+      .insert([{ question_id: question.id, user_id: state.session.user.id, content }]);
+    if (error) throw error;
+
+    elements.opinionInput.value = "";
+    updateOpinionCharCount();
+    await renderParticipantOpinionFeed();
+  } catch (err) {
+    console.error("의견 제출 실패:", err);
+    alert("의견 제출에 실패했습니다. 제출 시간이 끝났을 수 있습니다.");
+  } finally {
+    elements.opinionSubmitBtn.disabled = state.isAnswered;
+    elements.opinionSubmitBtn.textContent = "의견 제출";
+  }
+}
+
+// 의견수렴 제한시간 종료: 제출만 마감하고, 추천은 관리자가 마감할 때까지 계속 가능합니다.
+function closeOpinionSubmission() {
+  if (state.isAnswered) return;
+  state.isAnswered = true;
+  clearInterval(state.timerInterval);
+  stopBgm();
+
+  elements.timerText.textContent = "⏱️";
+  elements.opinionInput.disabled = true;
+  elements.opinionSubmitBtn.disabled = true;
+  elements.quizFooterMessage.textContent = "의견 제출이 마감되었습니다. 추천은 관리자가 마감할 때까지 계속할 수 있습니다.";
 }
 
 // 9.8 참가자 응답을 quiz_answers 테이블에 기록
@@ -1449,6 +2288,8 @@ async function loadQuizReview() {
       supabaseClient.removeChannel(state.reviewDistributionChannel);
       state.reviewDistributionChannel = null;
     }
+    state.reviewOpinionQuestionId = null;
+    elements.quizReviewOptions.classList.remove("opinion-feed");
 
     const activatedToday = state.lastActivatedAt &&
       new Date(state.lastActivatedAt).toDateString() === new Date().toDateString();
@@ -1474,6 +2315,15 @@ async function loadQuizReview() {
     elements.quizReviewEmpty.style.display = "none";
     elements.quizReviewContent.style.display = "block";
     elements.quizReviewQuestionText.textContent = questionRow.question_text;
+
+    // 의견수렴 문항은 선택지 분포 대신 추천순 의견 피드를 보여줍니다. (마감 전이면 추천 가능, 마감 후엔 획득 점수 표시)
+    if (isOpinionQuestion(questionRow)) {
+      state.reviewOpinionQuestionId = questionRow.id;
+      elements.quizReviewOptions.classList.add("opinion-feed");
+      const opinions = await fetchOpinions(questionRow.id);
+      renderOpinionFeed(elements.quizReviewOptions, questionRow, opinions || [], { canVote: true });
+      return;
+    }
 
     state.reviewTally = {};
     const { data: answerRows, error: countError } = await supabaseClient
@@ -1605,12 +2455,8 @@ function unlockAudioPlayback() {
 });
 
 // 10. Quiz Render & Timer Engine
-function loadQuestion(questionRow) {
-  state.currentQuestion = questionRow;
-  state.isAnswered = false;
-  state.selectedOptionIndices = [];
-  state.currentTimeLimit = questionRow.time_limit || TIMER_LIMIT;
-
+// 라이브 모드에서는 문제가 활성화된 시각 기준으로 남은 시간을 계산합니다. (state.currentTimeLimit이 먼저 설정되어 있어야 함)
+function getInitialTimeLeft() {
   // 라이브 모드에서는 문제가 실제로 활성화된 시각(activated_at) 기준으로 남은 시간을 계산합니다.
   // 새로고침/재접속으로 이 화면에 다시 진입해도 타이머가 매번 처음부터 리셋되지 않도록 하기 위함입니다.
   let initialTimeLeft = state.currentTimeLimit;
@@ -1622,7 +2468,19 @@ function loadQuestion(questionRow) {
     // 문제에 설정된 제한시간을 넘는 값이 표시되지 않도록 상한을 한 번 더 클램프합니다.
     initialTimeLeft = Math.min(state.currentTimeLimit, Math.max(0, Math.ceil(state.currentTimeLimit - elapsedSeconds)));
   }
+  return initialTimeLeft;
+}
+
+function loadQuestion(questionRow) {
+  state.currentQuestion = questionRow;
+  state.isAnswered = false;
+  state.selectedOptionIndices = [];
+  state.currentTimeLimit = questionRow.time_limit || TIMER_LIMIT;
+
+  const initialTimeLeft = getInitialTimeLeft();
   state.timeLeft = initialTimeLeft;
+
+  setQuizMode("choice");
 
   // Update Header
   elements.questionPointsBadge.textContent = questionRow.points;
@@ -1738,6 +2596,10 @@ function handleSubmitAnswer() {
 // 12. Handle Timeout — 선택해둔 답이 있으면 그대로 자동 제출, 없으면 무응답 처리
 function handleTimeout() {
   playGong();
+  if (isOpinionQuestion(state.currentQuestion)) {
+    closeOpinionSubmission();
+    return;
+  }
   gradeAnswer(state.selectedOptionIndices);
 }
 
@@ -1825,6 +2687,7 @@ function finishAnswering(questionId, selectedOptions, isCorrect, scoreRatio) {
       switchScreen(elements.welcomeScreen);
       await loadLeaderboard();
       await loadQuizReview();
+      await loadOpinionBoard();
     }, 1800);
   } else {
     // 오프라인 모드: 기존 순차 진행 방식 유지
