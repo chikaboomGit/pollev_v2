@@ -1548,6 +1548,50 @@ body.light-theme .review-body {
   padding: 16px 0;
 }
 
+/* 로그인/가입/비밀번호 재설정 폼은 넓은 화면에서도 읽기 좋은 폭으로 가운데 정렬 */
+.auth-container {
+  max-width: 480px;
+  margin: 0 auto;
+}
+
+/* ----------------------------------------------------
+   9b. Wide Screen (PC / 프로젝터) — 폭과 글자 크기를 함께 확대
+   대부분의 크기가 rem 단위라 루트 글자 크기만 올려도 버튼·보기·분포 막대·리더보드가 비례해서 커집니다.
+---------------------------------------------------- */
+@media (min-width: 1200px) {
+  :root {
+    --container-width: 1100px;
+  }
+
+  html {
+    font-size: 18px;
+  }
+
+  .screen-card {
+    padding: 40px 48px;
+  }
+
+  .question-text {
+    font-size: 1.6rem !important;
+  }
+
+  /* 보기를 2열로 배치해 세로 길이를 줄입니다 (OX는 2개라 한 줄) */
+  .options-container {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1600px) {
+  :root {
+    --container-width: 1400px;
+  }
+
+  html {
+    font-size: 20px;
+  }
+}
+
 /* ----------------------------------------------------
    10. Responsiveness / Mobile Adaptability
 ---------------------------------------------------- */

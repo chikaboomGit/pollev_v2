@@ -2419,6 +2419,11 @@ const bgmAudio = new Audio("bgm.m4a");
 bgmAudio.loop = true;
 bgmAudio.volume = 0.3; // 비프/Gong 효과음보다 낮게, 배경음 성격 유지
 
+// 배점 0점 문제는 긴장감 없이 풀도록 BGM을 재생하지 않습니다. (비프/공 효과음은 타이머 신호라 유지)
+function shouldPlayBgm() {
+  return !!state.currentQuestion && state.currentQuestion.points > 0;
+}
+
 function playBgm() {
   bgmAudio.currentTime = 0;
   bgmAudio.play().catch(() => {}); // 브라우저 자동재생 정책으로 거부돼도 조용히 무시
@@ -2442,7 +2447,7 @@ function unlockAudioPlayback() {
   bgmAudio.play().then(() => {
     audioUnlocked = true;
     // 지금 재생 중인 문제가 없다면(단순 잠금 해제 목적이었다면) 다시 정지시켜 무음 상태를 유지합니다.
-    if (!(state.currentQuestion && !state.isAnswered)) {
+    if (!(state.currentQuestion && !state.isAnswered && shouldPlayBgm())) {
       stopBgm();
     }
     ["click", "keydown", "touchstart"].forEach((eventName) => {
@@ -2528,7 +2533,9 @@ function loadQuestion(questionRow) {
 function startTimer() {
   clearInterval(state.timerInterval);
   updateTimerUI();
-  playBgm();
+  if (shouldPlayBgm()) {
+    playBgm();
+  }
 
   state.timerInterval = setInterval(() => {
     state.timeLeft--;
