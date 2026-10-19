@@ -1189,9 +1189,21 @@ body.light-theme .option-marker {
   flex: 1;
   padding: 8px 10px;
   border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  background: rgba(255, 255, 255, 0.05);
-  color: var(--text-primary, #f1f5f9);
+  border: 1px solid var(--input-border);
+  background: var(--input-bg);
+  color: var(--text-main);
+  font-family: var(--font-body);
+  font-size: 1rem;
+  outline: none;
+}
+
+.question-option-input::placeholder {
+  color: var(--text-muted);
+  opacity: 0.6;
+}
+
+.question-option-input:focus {
+  border-color: var(--input-focus-border);
 }
 
 /* 실시간 답안 분포 */
