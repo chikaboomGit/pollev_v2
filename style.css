@@ -21,8 +21,9 @@ body.dark-theme {
   --bg-app: #1B262C;
   --card-bg: rgba(15, 76, 117, 0.35);
   --card-border: rgba(187, 225, 250, 0.12);
-  --text-main: #BBE1FA;
-  --text-muted: #7fa8c9;
+  --text-main: #F1F8FE; /* 거의 흰색 — 어두운 네이비 배경에서 본문 대비 확보 */
+  --text-muted: #B4CFE4;
+  --text-secondary: #B4CFE4;
 
   --primary: #3282B8;
   --primary-dark: #0F4C75;
