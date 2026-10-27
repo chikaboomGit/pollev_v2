@@ -292,6 +292,17 @@
               </div>
               <div id="admin-opinion-feed" class="opinion-feed"></div>
             </div>
+
+            <!-- 행운의 추첨 (점수 비례 돌림판) -->
+            <div class="lucky-draw-admin">
+              <h4>🎡 행운의 추첨</h4>
+              <p class="question-opinion-hint">누적 점수 1점 이상인 참가자 중 점수에 비례한 확률로 1명을 뽑습니다. 이미 당첨된 사람은 제외됩니다.</p>
+              <div class="question-form-actions">
+                <button type="button" id="lucky-draw-btn" class="btn btn-primary">추첨</button>
+                <button type="button" id="lucky-draw-reset-btn" class="btn btn-secondary">추첨 기록 초기화</button>
+              </div>
+              <ol id="lucky-draw-history" class="lucky-draw-history"></ol>
+            </div>
           </div>
 
           <div class="start-actions">
@@ -420,6 +431,19 @@
     <footer class="app-footer">
       <p>&copy; 2026 One Quiz. Developed with pure Vanilla HTML/CSS/JS.</p>
     </footer>
+  </div>
+
+  <!-- 행운의 추첨 돌림판 오버레이 (관리자가 "추첨"을 누르면 모든 화면에 표시) -->
+  <div id="lucky-draw-overlay" class="lucky-draw-overlay" style="display: none;">
+    <div class="lucky-draw-card">
+      <h3>🎡 행운의 추첨</h3>
+      <div class="lucky-draw-wheel-wrap">
+        <div class="lucky-draw-pointer"></div>
+        <canvas id="lucky-draw-canvas" class="lucky-draw-canvas"></canvas>
+      </div>
+      <p id="lucky-draw-result" class="lucky-draw-result">두근두근... 추첨 중입니다!</p>
+      <button type="button" id="lucky-draw-close-btn" class="btn btn-secondary" style="display: none;">닫기</button>
+    </div>
   </div>
 
   <!-- Custom Script -->

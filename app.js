@@ -90,7 +90,11 @@ let state = {
   lastQuestionId: null, // 마지막으로 활성화됐던 문제 id (비활성화 이후에도 유지됨)
   lastActivatedAt: null,
   reviewDistributionChannel: null,
-  reviewTally: {} // { optionIdx: count } — 리뷰 카드에 표시할 실시간 선택 분포
+  reviewTally: {}, // { optionIdx: count } — 리뷰 카드에 표시할 실시간 선택 분포
+
+  // 행운의 추첨 (돌림판)
+  luckyDrawChannel: null, // lucky_draws 변경 구독 채널 (로그인 시 1회)
+  luckyDrawAnimationId: null // 돌림판 회전 requestAnimationFrame id
 };
 
 // 3. DOM Elements Cache
@@ -161,6 +165,13 @@ const elements = {
   adminOpinionTitle: document.getElementById("admin-opinion-title"),
   adminOpinionCloseBtn: document.getElementById("admin-opinion-close-btn"),
   adminOpinionFeed: document.getElementById("admin-opinion-feed"),
+  luckyDrawBtn: document.getElementById("lucky-draw-btn"),
+  luckyDrawResetBtn: document.getElementById("lucky-draw-reset-btn"),
+  luckyDrawHistory: document.getElementById("lucky-draw-history"),
+  luckyDrawOverlay: document.getElementById("lucky-draw-overlay"),
+  luckyDrawCanvas: document.getElementById("lucky-draw-canvas"),
+  luckyDrawResult: document.getElementById("lucky-draw-result"),
+  luckyDrawCloseBtn: document.getElementById("lucky-draw-close-btn"),
 
   // 폴더 추가 폼 (관리자)
   folderForm: document.getElementById("folder-form"),
@@ -252,6 +263,9 @@ function init() {
   elements.adminDeactivateBtn.addEventListener("click", () => activateQuestion(null));
   elements.adminClearLastQuestionBtn.addEventListener("click", clearLastQuestionReveal);
   elements.adminClearLastOpinionBtn.addEventListener("click", clearLastOpinionReveal);
+  elements.luckyDrawBtn.addEventListener("click", runLuckyDraw);
+  elements.luckyDrawResetBtn.addEventListener("click", resetLuckyDraws);
+  elements.luckyDrawCloseBtn.addEventListener("click", closeLuckyDraw);
   elements.retryBtn.addEventListener("click", resetQuiz);
   elements.themeToggleBtn.addEventListener("click", toggleTheme);
   elements.muteToggleBtn.addEventListener("click", toggleMute);
@@ -347,6 +361,7 @@ function init() {
           elements.waitingPanel.style.display = "none";
           elements.adminPanel.style.display = "block";
           await loadQuestionList();
+          await loadLuckyDrawHistory();
         } else {
           elements.adminPanel.style.display = "none";
           elements.waitingPanel.style.display = "block";
@@ -355,6 +370,7 @@ function init() {
 
         await subscribeToQuizState();
         subscribeToOpinionChanges();
+        subscribeToLuckyDraws();
       } else {
         // User logged out
         state.username = "";
@@ -390,6 +406,11 @@ function init() {
           supabaseClient.removeChannel(state.opinionChannel);
           state.opinionChannel = null;
         }
+        if (state.luckyDrawChannel) {
+          supabaseClient.removeChannel(state.luckyDrawChannel);
+          state.luckyDrawChannel = null;
+        }
+        closeLuckyDraw();
         clearInterval(state.adminCountdownInterval);
         state.adminCountdownInterval = null;
         state.lastQuestionId = null;
@@ -2176,6 +2197,222 @@ function closeOpinionSubmission() {
   elements.opinionInput.disabled = true;
   elements.opinionSubmitBtn.disabled = true;
   elements.quizFooterMessage.textContent = "의견 제출이 마감되었습니다. 추천은 관리자가 마감할 때까지 계속할 수 있습니다.";
+}
+
+// 9.7d 행운의 추첨 (점수 비례 돌림판)
+// 관리자가 "추첨"을 누르면 서버(run_lucky_draw)가 당첨자를 정해 lucky_draws에 한 행을 기록하고,
+// 이 INSERT를 실시간으로 받은 모든 화면이 같은 돌림판을 같은 시각 기준으로 5초간 돌려 당첨자 칸에 멈춥니다.
+const LUCKY_DRAW_SPIN_MS = 5000;
+const LUCKY_DRAW_TURNS = 6; // 멈추기 전 최소 회전 바퀴 수
+
+function subscribeToLuckyDraws() {
+  if (!supabaseClient || state.luckyDrawChannel) return;
+
+  state.luckyDrawChannel = supabaseClient
+    .channel('lucky_draw_changes')
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'lucky_draws' },
+      (payload) => {
+        showLuckyDraw(payload.new);
+        if (state.isAdmin) loadLuckyDrawHistory();
+      })
+    .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'lucky_draws' },
+      () => {
+        if (state.isAdmin) loadLuckyDrawHistory();
+      })
+    .subscribe();
+}
+
+async function runLuckyDraw() {
+  if (!confirm("누적 점수 1점 이상인 참가자 중 1명을 추첨합니다. 모든 참가자 화면에 돌림판이 표시됩니다. 계속하시겠습니까?")) return;
+
+  elements.luckyDrawBtn.disabled = true;
+  try {
+    const { error } = await supabaseClient.rpc('run_lucky_draw');
+    if (error) throw error;
+  } catch (err) {
+    console.error("추첨 실패:", err);
+    alert("추첨에 실패했습니다: " + err.message);
+  } finally {
+    elements.luckyDrawBtn.disabled = false;
+  }
+}
+
+async function resetLuckyDraws() {
+  if (!confirm("추첨 기록을 모두 삭제합니다. 이전 당첨자도 다시 추첨 대상에 포함됩니다. 계속하시겠습니까?")) return;
+
+  try {
+    const { error } = await supabaseClient.from('lucky_draws').delete().gt('id', 0);
+    if (error) throw error;
+    await loadLuckyDrawHistory();
+    alert("추첨 기록이 초기화되었습니다.");
+  } catch (err) {
+    console.error("추첨 기록 초기화 실패:", err);
+    alert("추첨 기록 초기화에 실패했습니다: " + err.message);
+  }
+}
+
+// 관리자 패널: 지금까지의 당첨자 목록 (추첨 순)
+async function loadLuckyDrawHistory() {
+  if (!supabaseClient || !state.isAdmin) return;
+
+  const { data, error } = await supabaseClient
+    .from('lucky_draws')
+    .select('id, winner_username, winner_email, created_at')
+    .order('created_at', { ascending: true });
+
+  if (error) {
+    console.error("추첨 기록 조회 실패:", error.message);
+    return;
+  }
+
+  elements.luckyDrawHistory.innerHTML = "";
+  (data || []).forEach(row => {
+    const li = document.createElement("li");
+    li.textContent = `${row.winner_username} (${row.winner_email || "이메일 없음"})`;
+    elements.luckyDrawHistory.appendChild(li);
+  });
+}
+
+// 돌림판 칸 색상: 황금각으로 색상환을 고르게 나눠 이웃 칸끼리 구분되게 합니다.
+function luckyDrawSegmentColor(idx) {
+  return `hsl(${Math.round((idx * 137.5) % 360)}, 65%, 52%)`;
+}
+
+// 칸마다 [시작각, 끝각] (라디안, 12시 방향 0에서 시계방향) — 면적은 점수에 비례
+function buildLuckyDrawSegments(entries) {
+  const total = entries.reduce((sum, e) => sum + Number(e.score), 0);
+  let angle = 0;
+  return entries.map(e => {
+    const span = (Number(e.score) / total) * Math.PI * 2;
+    const segment = { ...e, start: angle, end: angle + span };
+    angle += span;
+    return segment;
+  });
+}
+
+function drawLuckyWheel(segments, rotation) {
+  const canvas = elements.luckyDrawCanvas;
+  const ctx = canvas.getContext("2d");
+  const size = canvas.width;
+  const center = size / 2;
+  const radius = center - 4;
+
+  ctx.clearRect(0, 0, size, size);
+  ctx.save();
+  ctx.translate(center, center);
+  ctx.rotate(rotation);
+
+  segments.forEach((seg, idx) => {
+    // 캔버스의 0rad는 3시 방향이므로 -90°를 더해 12시 방향 기준으로 맞춥니다.
+    const start = seg.start - Math.PI / 2;
+    const end = seg.end - Math.PI / 2;
+
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.arc(0, 0, radius, start, end);
+    ctx.closePath();
+    ctx.fillStyle = luckyDrawSegmentColor(idx);
+    ctx.fill();
+    if (segments.length > 1) {
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.8)";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+
+    // 칸이 너무 좁으면 이름이 겹치므로 생략합니다.
+    if (seg.end - seg.start < 0.12) return;
+    const name = seg.username.length > 8 ? seg.username.slice(0, 8) + "…" : seg.username;
+    ctx.save();
+    ctx.rotate((start + end) / 2);
+    ctx.textAlign = "right";
+    ctx.textBaseline = "middle";
+    ctx.font = `700 ${Math.max(12, Math.round(size / 26))}px ${getComputedStyle(document.body).fontFamily}`;
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = "rgba(0, 0, 0, 0.45)";
+    ctx.strokeText(name, radius - 12, 0);
+    ctx.fillStyle = "#ffffff";
+    ctx.fillText(name, radius - 12, 0);
+    ctx.restore();
+  });
+
+  ctx.restore();
+
+  // 가운데 원
+  ctx.beginPath();
+  ctx.arc(center, center, size / 14, 0, Math.PI * 2);
+  ctx.fillStyle = "#ffffff";
+  ctx.fill();
+}
+
+// 회전각이 rotation일 때 12시 방향 화살표 아래에 있는 칸 번호
+function luckyDrawSegmentAtPointer(segments, rotation) {
+  const twoPi = Math.PI * 2;
+  const angle = ((-rotation % twoPi) + twoPi) % twoPi;
+  const idx = segments.findIndex(seg => angle >= seg.start && angle < seg.end);
+  return idx === -1 ? segments.length - 1 : idx;
+}
+
+function showLuckyDraw(draw) {
+  const entries = Array.isArray(draw.entries) ? draw.entries : [];
+  if (entries.length === 0) return;
+
+  cancelAnimationFrame(state.luckyDrawAnimationId);
+  const segments = buildLuckyDrawSegments(entries);
+  let winnerIdx = segments.findIndex(seg => seg.user_id === draw.winner_user_id);
+  if (winnerIdx === -1) winnerIdx = 0;
+  const winner = segments[winnerIdx];
+
+  // 당첨 칸 안에서 멈출 위치를 추첨 id로 정해, 모든 화면이 같은 지점에 멈추도록 합니다.
+  const offsetRatio = 0.2 + 0.6 * (((Number(draw.id) * 9301 + 49297) % 233280) / 233280);
+  const stopAngle = winner.start + (winner.end - winner.start) * offsetRatio;
+  const finalRotation = LUCKY_DRAW_TURNS * Math.PI * 2 - stopAngle;
+
+  elements.luckyDrawResult.textContent = "두근두근... 추첨 중입니다!";
+  elements.luckyDrawResult.classList.remove("is-winner");
+  elements.luckyDrawCloseBtn.style.display = "none";
+  elements.luckyDrawOverlay.style.display = "flex";
+
+  // 고해상도 화면에서도 선명하도록 실제 표시 크기 × devicePixelRatio로 캔버스를 그립니다.
+  const displaySize = elements.luckyDrawCanvas.getBoundingClientRect().width || 320;
+  elements.luckyDrawCanvas.width = Math.round(displaySize * (window.devicePixelRatio || 1));
+  elements.luckyDrawCanvas.height = elements.luckyDrawCanvas.width;
+
+  // 서버 기록 시각 기준으로 경과 시간을 계산해, 늦게 받은 화면도 같은 시각에 멈춥니다.
+  const startedAt = new Date(draw.created_at).getTime();
+  const startMs = Number.isNaN(startedAt) ? getServerNow() : startedAt;
+  let lastSegmentIdx = -1;
+
+  const frame = () => {
+    const progress = Math.min(1, Math.max(0, (getServerNow() - startMs) / LUCKY_DRAW_SPIN_MS));
+    const eased = 1 - Math.pow(1 - progress, 3); // easeOutCubic: 빠르게 돌다가 서서히 멈춤
+    const rotation = finalRotation * eased;
+    drawLuckyWheel(segments, rotation);
+
+    const segmentIdx = luckyDrawSegmentAtPointer(segments, rotation);
+    if (segmentIdx !== lastSegmentIdx && progress < 1) {
+      if (lastSegmentIdx !== -1 && segments.length > 1) playTone(1200, 0.03, 0.08);
+      lastSegmentIdx = segmentIdx;
+    }
+
+    if (progress < 1) {
+      state.luckyDrawAnimationId = requestAnimationFrame(frame);
+      return;
+    }
+
+    state.luckyDrawAnimationId = null;
+    elements.luckyDrawResult.textContent = `🎉 당첨자: ${draw.winner_username} (${draw.winner_email || "이메일 없음"})`;
+    elements.luckyDrawResult.classList.add("is-winner");
+    elements.luckyDrawCloseBtn.style.display = "inline-block";
+    playGong();
+  };
+
+  frame();
+}
+
+function closeLuckyDraw() {
+  cancelAnimationFrame(state.luckyDrawAnimationId);
+  state.luckyDrawAnimationId = null;
+  elements.luckyDrawOverlay.style.display = "none";
 }
 
 // 9.8 참가자 응답을 quiz_answers 테이블에 기록
