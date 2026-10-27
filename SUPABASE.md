@@ -703,6 +703,70 @@ $$ language plpgsql security definer set search_path = public;
 grant execute on function public.run_lucky_draw() to authenticated;
 
 alter publication supabase_realtime add table public.lucky_draws;
+
+-- 35. [마이그레이션] 추첨 돌림판 회전 시간(초)을 관리자가 지정
+-- spin_seconds: 관리자가 추첨 버튼 옆에 입력한 회전 시간. 모든 화면이 이 값으로 같은 시각에 멈춥니다.
+-- 인자 없는 기존 함수가 남아 있으면 호출이 모호해지므로 먼저 삭제합니다.
+alter table public.lucky_draws add column if not exists spin_seconds integer not null default 5
+  check (spin_seconds between 1 and 60);
+
+drop function if exists public.run_lucky_draw();
+
+create or replace function public.run_lucky_draw(p_spin_seconds integer default 5)
+returns public.lucky_draws as $$
+declare
+  v_entries jsonb;
+  v_total numeric;
+  v_pick numeric;
+  v_winner_id uuid;
+  v_winner_name text;
+  v_row public.lucky_draws;
+begin
+  if not exists (select 1 from public.profiles where id = auth.uid() and is_admin = true) then
+    raise exception '관리자만 추첨할 수 있습니다.';
+  end if;
+  if p_spin_seconds is null or p_spin_seconds < 1 or p_spin_seconds > 60 then
+    raise exception '회전 시간은 1~60초 사이로 입력하세요.';
+  end if;
+
+  select jsonb_agg(jsonb_build_object('user_id', c.user_id, 'username', c.username, 'score', c.score)
+                   order by c.score desc, c.username),
+         sum(c.score)
+    into v_entries, v_total
+  from (
+    select l.user_id, l.username, l.total_score::numeric as score
+    from public.leaderboard l
+    join public.profiles p on p.id = l.user_id
+    where l.total_score > 0
+      and p.is_admin = false
+      and not exists (select 1 from public.lucky_draws d where d.winner_user_id = l.user_id)
+  ) c;
+
+  if v_entries is null then
+    raise exception '추첨 대상(1점 이상, 이전 미당첨자)이 없습니다.';
+  end if;
+
+  -- 누적 점수 구간 [cum - score, cum) 안에 난수가 떨어지는 참가자가 당첨
+  v_pick := random() * v_total;
+  select (s.e->>'user_id')::uuid, s.e->>'username'
+    into v_winner_id, v_winner_name
+  from (
+    select e, sum((e->>'score')::numeric) over (order by ord) as cum
+    from jsonb_array_elements(v_entries) with ordinality as t(e, ord)
+  ) s
+  where s.cum > v_pick
+  order by s.cum
+  limit 1;
+
+  insert into public.lucky_draws (winner_user_id, winner_username, winner_email, entries, spin_seconds)
+  values (v_winner_id, v_winner_name, (select email from auth.users where id = v_winner_id), v_entries, p_spin_seconds)
+  returning * into v_row;
+
+  return v_row;
+end;
+$$ language plpgsql security definer set search_path = public;
+
+grant execute on function public.run_lucky_draw(integer) to authenticated;
 ```
 
 **참고 — 의견수렴 익명 처리**: 익명 옵션은 참가자 화면에서 작성자 닉네임을 "익명"으로 표시하는 방식입니다. `opinions.user_id`는 로그인한 사용자라면 DB를 직접 조회해 확인할 수 있으므로, 강한 익명성이 필요한 경우에는 RPC 기반 조회로 전환해야 합니다. 관리자 화면에는 익명 문항이어도 작성자 닉네임이 표시됩니다.

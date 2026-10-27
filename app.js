@@ -166,8 +166,11 @@ const elements = {
   adminOpinionCloseBtn: document.getElementById("admin-opinion-close-btn"),
   adminOpinionFeed: document.getElementById("admin-opinion-feed"),
   luckyDrawBtn: document.getElementById("lucky-draw-btn"),
+  luckyDrawSecondsInput: document.getElementById("lucky-draw-seconds-input"),
   luckyDrawResetBtn: document.getElementById("lucky-draw-reset-btn"),
   luckyDrawHistory: document.getElementById("lucky-draw-history"),
+  luckyDrawWinnersBox: document.getElementById("lucky-draw-winners-box"),
+  luckyDrawWinnersList: document.getElementById("lucky-draw-winners-list"),
   luckyDrawOverlay: document.getElementById("lucky-draw-overlay"),
   luckyDrawCanvas: document.getElementById("lucky-draw-canvas"),
   luckyDrawResult: document.getElementById("lucky-draw-result"),
@@ -366,6 +369,7 @@ function init() {
           elements.adminPanel.style.display = "none";
           elements.waitingPanel.style.display = "block";
           await loadLeaderboard();
+          await loadLuckyDrawHistory();
         }
 
         await subscribeToQuizState();
@@ -2201,9 +2205,13 @@ function closeOpinionSubmission() {
 
 // 9.7d 행운의 추첨 (점수 비례 돌림판)
 // 관리자가 "추첨"을 누르면 서버(run_lucky_draw)가 당첨자를 정해 lucky_draws에 한 행을 기록하고,
-// 이 INSERT를 실시간으로 받은 모든 화면이 같은 돌림판을 같은 시각 기준으로 5초간 돌려 당첨자 칸에 멈춥니다.
-const LUCKY_DRAW_SPIN_MS = 5000;
-const LUCKY_DRAW_TURNS = 6; // 멈추기 전 최소 회전 바퀴 수
+// 이 INSERT를 실시간으로 받은 모든 화면이 같은 돌림판을 같은 시각 기준으로 관리자가 정한 시간(기본 5초)만큼 돌려 당첨자 칸에 멈춥니다.
+const LUCKY_DRAW_DEFAULT_SECONDS = 5;
+
+// 추첨 기록에 저장된 회전 시간(ms). 회전 시간 컬럼이 없는 예전 기록은 기본값을 씁니다.
+function getLuckyDrawSpinMs(draw) {
+  return (Number(draw.spin_seconds) || LUCKY_DRAW_DEFAULT_SECONDS) * 1000;
+}
 
 function subscribeToLuckyDraws() {
   if (!supabaseClient || state.luckyDrawChannel) return;
@@ -2213,21 +2221,30 @@ function subscribeToLuckyDraws() {
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'lucky_draws' },
       (payload) => {
         showLuckyDraw(payload.new);
-        if (state.isAdmin) loadLuckyDrawHistory();
+        // 돌림판이 멈추기 전에 결과가 목록에 먼저 보이지 않도록, 회전이 끝나는 시각에 맞춰 갱신합니다.
+        // (돌림판을 일찍 닫아도 목록은 갱신되도록 애니메이션과 별도로 예약)
+        const startedAt = new Date(payload.new.created_at).getTime();
+        const spinMs = getLuckyDrawSpinMs(payload.new);
+        const remainingMs = Number.isNaN(startedAt) ? spinMs : startedAt + spinMs - getServerNow();
+        setTimeout(loadLuckyDrawHistory, Math.max(0, remainingMs));
       })
     .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'lucky_draws' },
-      () => {
-        if (state.isAdmin) loadLuckyDrawHistory();
-      })
+      () => loadLuckyDrawHistory())
     .subscribe();
 }
 
 async function runLuckyDraw() {
-  if (!confirm("누적 점수 1점 이상인 참가자 중 1명을 추첨합니다. 모든 참가자 화면에 돌림판이 표시됩니다. 계속하시겠습니까?")) return;
+  const spinSeconds = Number(elements.luckyDrawSecondsInput.value);
+  if (!Number.isInteger(spinSeconds) || spinSeconds < 1 || spinSeconds > 60) {
+    alert("회전 시간은 1~60초 사이의 정수로 입력하세요.");
+    elements.luckyDrawSecondsInput.focus();
+    return;
+  }
+  if (!confirm(`누적 점수 1점 이상인 참가자 중 1명을 추첨합니다. 모든 참가자 화면에 돌림판이 ${spinSeconds}초간 표시됩니다. 계속하시겠습니까?`)) return;
 
   elements.luckyDrawBtn.disabled = true;
   try {
-    const { error } = await supabaseClient.rpc('run_lucky_draw');
+    const { error } = await supabaseClient.rpc('run_lucky_draw', { p_spin_seconds: spinSeconds });
     if (error) throw error;
   } catch (err) {
     console.error("추첨 실패:", err);
@@ -2251,13 +2268,13 @@ async function resetLuckyDraws() {
   }
 }
 
-// 관리자 패널: 지금까지의 당첨자 목록 (추첨 순)
+// 지금까지의 당첨자 목록 (추첨 순) — 관리자 패널과 참가자 대기 화면(리더보드 아래)에 표시
 async function loadLuckyDrawHistory() {
-  if (!supabaseClient || !state.isAdmin) return;
+  if (!supabaseClient || !state.session) return;
 
   const { data, error } = await supabaseClient
     .from('lucky_draws')
-    .select('id, winner_username, winner_email, created_at')
+    .select('id, winner_user_id, winner_username, winner_email, created_at')
     .order('created_at', { ascending: true });
 
   if (error) {
@@ -2265,11 +2282,35 @@ async function loadLuckyDrawHistory() {
     return;
   }
 
-  elements.luckyDrawHistory.innerHTML = "";
-  (data || []).forEach(row => {
+  const rows = data || [];
+
+  if (state.isAdmin) {
+    elements.luckyDrawHistory.innerHTML = "";
+    rows.forEach(row => {
+      const li = document.createElement("li");
+      li.textContent = `${row.winner_username} (${row.winner_email || "이메일 없음"})`;
+      elements.luckyDrawHistory.appendChild(li);
+    });
+    return;
+  }
+
+  elements.luckyDrawWinnersBox.style.display = rows.length > 0 ? "block" : "none";
+  elements.luckyDrawWinnersList.innerHTML = "";
+  rows.forEach((row, idx) => {
     const li = document.createElement("li");
-    li.textContent = `${row.winner_username} (${row.winner_email || "이메일 없음"})`;
-    elements.luckyDrawHistory.appendChild(li);
+    li.className = "leaderboard-item";
+    if (row.winner_user_id === state.session.user.id) li.classList.add("is-me");
+
+    const rank = document.createElement("span");
+    rank.className = "leaderboard-rank";
+    rank.textContent = idx + 1;
+    const name = document.createElement("span");
+    name.className = "leaderboard-name";
+    name.textContent = `🎉 ${row.winner_username} (${row.winner_email || "이메일 없음"})`;
+
+    li.appendChild(rank);
+    li.appendChild(name);
+    elements.luckyDrawWinnersList.appendChild(li);
   });
 }
 
@@ -2365,7 +2406,10 @@ function showLuckyDraw(draw) {
   // 당첨 칸 안에서 멈출 위치를 추첨 id로 정해, 모든 화면이 같은 지점에 멈추도록 합니다.
   const offsetRatio = 0.2 + 0.6 * (((Number(draw.id) * 9301 + 49297) % 233280) / 233280);
   const stopAngle = winner.start + (winner.end - winner.start) * offsetRatio;
-  const finalRotation = LUCKY_DRAW_TURNS * Math.PI * 2 - stopAngle;
+  // 회전 시간이 길수록 바퀴 수도 늘려 속도감을 비슷하게 유지합니다 (5초 → 6바퀴).
+  const spinMs = getLuckyDrawSpinMs(draw);
+  const turns = Math.max(3, Math.round((spinMs / 1000) * 1.2));
+  const finalRotation = turns * Math.PI * 2 - stopAngle;
 
   elements.luckyDrawResult.textContent = "두근두근... 추첨 중입니다!";
   elements.luckyDrawResult.classList.remove("is-winner");
@@ -2383,7 +2427,7 @@ function showLuckyDraw(draw) {
   let lastSegmentIdx = -1;
 
   const frame = () => {
-    const progress = Math.min(1, Math.max(0, (getServerNow() - startMs) / LUCKY_DRAW_SPIN_MS));
+    const progress = Math.min(1, Math.max(0, (getServerNow() - startMs) / spinMs));
     const eased = 1 - Math.pow(1 - progress, 3); // easeOutCubic: 빠르게 돌다가 서서히 멈춤
     const rotation = finalRotation * eased;
     drawLuckyWheel(segments, rotation);
