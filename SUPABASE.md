@@ -618,6 +618,11 @@ order by total_score desc;
 alter publication supabase_realtime add table public.opinions;
 alter publication supabase_realtime add table public.opinion_votes;
 alter publication supabase_realtime add table public.questions;
+
+-- 33. [마이그레이션] 의견수렴 대기 화면 공개 초기화
+-- opinion_hidden: 관리자가 "마지막 의견 수렴 공개 초기화"를 누르면 true가 되어 참가자 대기 화면
+-- ("최근 문제 리뷰"·"진행 중인 의견수렴")에서 숨겨지고, 해당 문항을 다시 활성화하면 false로 돌아갑니다.
+alter table public.questions add column if not exists opinion_hidden boolean not null default false;
 ```
 
 **참고 — 의견수렴 익명 처리**: 익명 옵션은 참가자 화면에서 작성자 닉네임을 "익명"으로 표시하는 방식입니다. `opinions.user_id`는 로그인한 사용자라면 DB를 직접 조회해 확인할 수 있으므로, 강한 익명성이 필요한 경우에는 RPC 기반 조회로 전환해야 합니다. 관리자 화면에는 익명 문항이어도 작성자 닉네임이 표시됩니다.

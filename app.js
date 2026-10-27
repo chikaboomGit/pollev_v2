@@ -155,6 +155,7 @@ const elements = {
   adminQuestionList: document.getElementById("admin-question-list"),
   adminDeactivateBtn: document.getElementById("admin-deactivate-btn"),
   adminClearLastQuestionBtn: document.getElementById("admin-clear-last-question-btn"),
+  adminClearLastOpinionBtn: document.getElementById("admin-clear-last-opinion-btn"),
   adminAnswerDistribution: document.getElementById("admin-answer-distribution"),
   adminOpinionPanel: document.getElementById("admin-opinion-panel"),
   adminOpinionTitle: document.getElementById("admin-opinion-title"),
@@ -250,6 +251,7 @@ function init() {
   elements.recoveryForm.addEventListener("submit", handleRecoverySubmit);
   elements.adminDeactivateBtn.addEventListener("click", () => activateQuestion(null));
   elements.adminClearLastQuestionBtn.addEventListener("click", clearLastQuestionReveal);
+  elements.adminClearLastOpinionBtn.addEventListener("click", clearLastOpinionReveal);
   elements.retryBtn.addEventListener("click", resetQuiz);
   elements.themeToggleBtn.addEventListener("click", toggleTheme);
   elements.muteToggleBtn.addEventListener("click", toggleMute);
@@ -1409,7 +1411,7 @@ function buildQuestionRow(q, idx, groupQuestions) {
   activateBtn.className = "btn btn-secondary admin-question-btn";
   if (isOpinion) {
     const opinionStatus = !q.opinion_opened_at ? "미진행" : (q.opinion_closed_at ? "마감" : "추천 진행중");
-    activateBtn.textContent = `[의견수렴 / ${q.points}점 / ${q.time_limit}초${q.is_anonymous ? " / 익명" : ""}] ${q.question_text} (의견 ${state.opinionCounts[q.id] || 0}개 · ${opinionStatus})`;
+    activateBtn.textContent = `[의견수렴 / ${q.points}점 / ${q.time_limit}초${q.is_anonymous ? " / 익명" : ""}] ${q.question_text} (의견 ${state.opinionCounts[q.id] || 0}개 · ${opinionStatus}${q.opinion_hidden ? " · 숨김" : ""})`;
   } else {
     activateBtn.textContent = `[${q.question_type === "OX" ? "OX" : "4지선다"} / ${q.points}점 / ${q.time_limit}초] ${q.question_text}`;
   }
@@ -1691,11 +1693,14 @@ async function activateQuestion(questionId) {
       const { error: reopenError } = await supabaseClient.rpc('reopen_opinion', { target_question_id: questionId });
       if (reopenError) throw reopenError;
     }
-    if (isOpinionQuestion(nextQuestion) && !nextQuestion.opinion_opened_at) {
+    if (isOpinionQuestion(nextQuestion) && (!nextQuestion.opinion_opened_at || nextQuestion.opinion_hidden)) {
       // 처음 활성화되는 의견수렴은 진행 시작 시각을 기록해, 비활성화 이후에도 참가자 대기 화면에서 추천을 계속할 수 있게 합니다.
+      // "마지막 의견 수렴 공개 초기화"로 숨겨졌던 문항은 다시 활성화하면 대기 화면에 다시 표시합니다.
+      const openPayload = { opinion_hidden: false };
+      if (!nextQuestion.opinion_opened_at) openPayload.opinion_opened_at = new Date().toISOString();
       const { error: openError } = await supabaseClient
         .from('questions')
-        .update({ opinion_opened_at: new Date().toISOString() })
+        .update(openPayload)
         .eq('id', questionId);
       if (openError) throw openError;
     }
@@ -1747,6 +1752,31 @@ async function clearLastQuestionReveal() {
     alert("마지막 문제 공개가 초기화되었습니다.");
   } catch (err) {
     console.error("마지막 문제 초기화 실패:", err);
+    alert("초기화에 실패했습니다: " + err.message);
+  }
+}
+
+// 9.7b-2 관리자: 참가자 대기 화면에 표시되는 의견수렴("최근 문제 리뷰"·"진행 중인 의견수렴")을 모두 숨깁니다.
+// 지금 진행 중인 문항은 제외하며, 숨긴 문항은 다시 활성화하면 다시 표시됩니다. (추천 마감/점수에는 영향 없음)
+async function clearLastOpinionReveal() {
+  const proceed = confirm("참가자 대기 화면에 표시된 의견수렴(최근 리뷰·진행 중 목록)을 모두 숨깁니다. 숨긴 문항은 다시 활성화하면 다시 표시됩니다. 계속하시겠습니까?");
+  if (!proceed) return;
+
+  try {
+    let query = supabaseClient
+      .from('questions')
+      .update({ opinion_hidden: true })
+      .eq('question_type', 'OPINION')
+      .eq('opinion_hidden', false);
+    if (state.activeQuestionId) query = query.neq('id', state.activeQuestionId);
+    const { error } = await query;
+
+    if (error) throw error;
+
+    await loadQuestionList();
+    alert("마지막 의견 수렴 공개가 초기화되었습니다.");
+  } catch (err) {
+    console.error("마지막 의견 수렴 초기화 실패:", err);
     alert("초기화에 실패했습니다: " + err.message);
   }
 }
@@ -2003,6 +2033,7 @@ async function loadOpinionBoard() {
       .eq('question_type', 'OPINION')
       .not('opinion_opened_at', 'is', null)
       .is('opinion_closed_at', null)
+      .eq('opinion_hidden', false)
       .order('opinion_opened_at', { ascending: false });
 
     if (error) throw error;
@@ -2306,7 +2337,8 @@ async function loadQuizReview() {
       .eq('id', state.lastQuestionId)
       .single();
 
-    if (error || !questionRow) {
+    // "마지막 의견 수렴 공개 초기화"로 숨겨진 의견수렴 문항은 리뷰에서도 노출하지 않습니다.
+    if (error || !questionRow || (isOpinionQuestion(questionRow) && questionRow.opinion_hidden)) {
       elements.quizReviewEmpty.style.display = "block";
       elements.quizReviewContent.style.display = "none";
       return;
