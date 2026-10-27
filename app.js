@@ -928,7 +928,7 @@ async function handleActiveQuestionChange(questionId, activatedAt) {
       state.timerInterval = null;
       stopBgm();
     }
-    elements.waitingMessage.textContent = "관리자가 문제를 활성화하면 자동으로 화면이 전환됩니다. 잠시만 기다려주세요...";
+    elements.waitingMessage.textContent = "관리자가 문제를 활성화 하거나 설문조사를 요청하면 자동으로 화면이 전환됩니다. 잠시만 기다려주세요...";
     switchScreen(elements.welcomeScreen);
     await loadLeaderboard();
     await loadQuizReview();
@@ -1911,7 +1911,7 @@ function renderOpinionFeed(container, question, opinions, { canVote, adminMode =
     voteBtn.type = "button";
     voteBtn.className = "opinion-vote-btn";
     if (opinion.votedByMe) voteBtn.classList.add("voted");
-    voteBtn.textContent = `👍 ${opinion.voteCount}`;
+    voteBtn.textContent = `👍 ${opinion.votedByMe ? "추천함" : "추천"} ${opinion.voteCount}`;
     voteBtn.disabled = !canVote || isClosed || opinion.isMine;
     if (opinion.isMine && canVote) voteBtn.title = "내 의견에는 추천할 수 없습니다.";
     voteBtn.addEventListener("click", () => toggleOpinionVote(question, opinion, voteBtn));

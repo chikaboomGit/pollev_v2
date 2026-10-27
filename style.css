@@ -1083,13 +1083,27 @@ body.light-theme .option-marker {
   transition: var(--transition-normal);
 }
 
+/* 추천 버튼은 엄지로 누르기 쉽도록 크게, "추천" 글자와 함께 표시합니다. */
+.opinion-vote-btn {
+  min-height: 44px;
+  min-width: 88px;
+  padding: 10px 16px;
+  font-size: 1rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
 .opinion-vote-btn:hover:not(:disabled) {
   border-color: var(--secondary);
 }
 
 .opinion-vote-btn.voted {
-  background: var(--primary-glow);
+  background: var(--secondary);
   border-color: var(--secondary);
+  color: var(--bg-app);
 }
 
 .opinion-vote-btn:disabled {
@@ -1576,7 +1590,7 @@ body.light-theme .review-body {
   }
 
   html {
-    font-size: 18px;
+    font-size: 22px;
   }
 
   .screen-card {
@@ -1600,7 +1614,7 @@ body.light-theme .review-body {
   }
 
   html {
-    font-size: 20px;
+    font-size: 24px;
   }
 }
 
